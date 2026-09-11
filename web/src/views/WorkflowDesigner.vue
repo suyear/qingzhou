@@ -56,8 +56,8 @@
           </template>
           <div class="hotkeys">
             <div>Delete：删除当前步骤</div>
-            <div>流程图：空白处拖拽或双指滑动平移</div>
-            <div>流程图：Ctrl / ⌘ + 滚轮缩放（也可用按钮）</div>
+            <div>流程图：空白拖拽或双指滑动平移</div>
+            <div>流程图：捏合，或 Ctrl / ⌘ + 滚轮缩放</div>
           </div>
         </el-popover>
       </div>
@@ -70,31 +70,6 @@
       :title="`调度和开放调用走已发布快照 v${form.version || 1}；试运行仍用当前草稿。`"
     />
     <div class="body">
-      <aside class="palette">
-        <div class="palette-title">接口组件</div>
-        <p class="palette-hint">点击添加到调用链末尾；中间「添加接口」同样可用</p>
-        <el-input v-model="keyword" size="small" placeholder="筛选组件" clearable />
-        <div v-if="!components.length" class="palette-empty">
-          <p>还没有接口组件</p>
-          <el-button type="primary" link @click="router.push('/components')">去接入接口</el-button>
-        </div>
-        <div v-else-if="!grouped.length" class="palette-empty">
-          <p>没有匹配的组件</p>
-        </div>
-        <div v-for="group in grouped" :key="group.key" class="group">
-          <div class="group-name">{{ group.label }}</div>
-          <div
-            v-for="item in group.items"
-            :key="item.id"
-            class="palette-item"
-            @click="addToChain(item)"
-          >
-            <div class="name">{{ item.componentName }}</div>
-            <div class="sub">{{ item.httpMethod }} {{ urlPath(item.urlTemplate) }}</div>
-            <div class="add-hint">+ 添加</div>
-          </div>
-        </div>
-      </aside>
       <WorkflowStepEditor
         :chain-nodes="chainNodes"
         :selected-id="selectedId"
@@ -137,7 +112,7 @@
             <p>添加步骤后可在此查看流程图</p>
           </div>
           <div v-else class="canvas-overlay">
-            <span class="canvas-hint">拖空白平移 · Ctrl / ⌘ + 滚轮缩放</span>
+            <span class="canvas-hint">拖空白或双指平移 · 捏合 / Ctrl+滚轮缩放</span>
             <div class="canvas-float-tools">
               <span class="zoom-pill">{{ zoomPercent }}%</span>
               <el-button-group size="small">
@@ -235,7 +210,7 @@ import { getTeleport } from '@antv/x6-vue-shape'
 import { pageComponents } from '@/api/component'
 import { pageCredentials } from '@/api/credential'
 import { createWorkflow, getWorkflow, publishWorkflow, tryRunWorkflow, updateWorkflow } from '@/api/workflow'
-import { CATEGORY_LABEL, fieldsToSchema, schemaFields, schemaToFields, toNodeData, urlPath } from '@/utils/schema'
+import { fieldsToSchema, schemaFields, schemaToFields, toNodeData, urlPath } from '@/utils/schema'
 import {
   applyBindingsToNodeData,
   bindingsToInputFields,
@@ -259,7 +234,6 @@ const TeleportContainer = getTeleport()
 const route = useRoute()
 const router = useRouter()
 const canvasRef = ref(null)
-const keyword = ref('')
 const saving = ref(false)
 const publishing = ref(false)
 const running = ref(false)
@@ -289,6 +263,7 @@ const WHEEL_ZOOM_FACTOR = 1.02
 let hydrating = false
 let ready = false
 let canvasResizeObserver = null
+let canvasWrapEl = null
 const canvasEmpty = computed(() => {
   nodeTick.value
   return !graph || graph.getNodes().length === 0
@@ -401,21 +376,6 @@ async function resumeClean() {
 
 let graph = null
 
-const grouped = computed(() => {
-  const map = new Map()
-  for (const item of components.value) {
-    if (keyword.value && !`${item.componentName}${item.componentCode}`.includes(keyword.value)) {
-      continue
-    }
-    const key = item.category || 'HTTP'
-    if (!map.has(key)) {
-      map.set(key, { key, label: CATEGORY_LABEL[key] || key, items: [] })
-    }
-    map.get(key).items.push(item)
-  }
-  return [...map.values()]
-})
-
 function getOrderedNodes() {
   if (!graph) return []
   return [...graph.getNodes()].sort((a, b) => a.position().x - b.position().x)
@@ -484,6 +444,12 @@ function createGraph() {
       zoomAtMousePosition: true,
       minScale: ZOOM_MIN,
       maxScale: ZOOM_MAX,
+      guard(evt) {
+        if (evt.ctrlKey || evt.metaKey) {
+          evt.preventDefault()
+        }
+        return true
+      },
     },
     interacting: {
       nodeMovable: false,
@@ -564,12 +530,25 @@ function createGraph() {
 function bindCanvasResize() {
   canvasResizeObserver?.disconnect()
   canvasResizeObserver = null
-  if (!canvasWrapRef.value || typeof ResizeObserver === 'undefined') return
+  if (canvasWrapEl) {
+    canvasWrapEl.removeEventListener('wheel', onCanvasWheel)
+    canvasWrapEl = null
+  }
+  if (!canvasWrapRef.value) return
+  canvasWrapEl = canvasWrapRef.value
+  canvasWrapEl.addEventListener('wheel', onCanvasWheel, { passive: false })
+  if (typeof ResizeObserver === 'undefined') return
   canvasResizeObserver = new ResizeObserver(() => {
     if (!graph || !canvasVisible.value) return
     refreshCanvasView(false)
   })
-  canvasResizeObserver.observe(canvasWrapRef.value)
+  canvasResizeObserver.observe(canvasWrapEl)
+}
+
+function onCanvasWheel(event) {
+  if (event.ctrlKey || event.metaKey) {
+    event.preventDefault()
+  }
 }
 
 function toggleCanvas() {
@@ -1135,6 +1114,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onWindowResize)
   canvasResizeObserver?.disconnect()
   canvasResizeObserver = null
+  if (canvasWrapEl) {
+    canvasWrapEl.removeEventListener('wheel', onCanvasWheel)
+    canvasWrapEl = null
+  }
   graph?.dispose()
   graph = null
 })
@@ -1191,23 +1174,6 @@ onBeforeUnmount(() => {
   min-height: 0;
   position: relative;
 }
-.palette {
-  width: 220px;
-  border-right: 1px solid var(--qz-border);
-  padding: 12px;
-  overflow: auto;
-  background: var(--qz-fill);
-}
-.palette-title {
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-.palette-hint {
-  margin: 0 0 10px;
-  font-size: 12px;
-  color: var(--qz-text-muted);
-  line-height: 1.4;
-}
 .step-pills {
   display: flex;
   gap: 6px;
@@ -1225,48 +1191,6 @@ onBeforeUnmount(() => {
   color: var(--el-color-primary);
   background: var(--qz-primary-soft);
   font-weight: 600;
-}
-.group {
-  margin-top: 12px;
-}
-.group-name {
-  font-size: 12px;
-  color: var(--qz-text-muted);
-  margin-bottom: 6px;
-}
-.palette-item {
-  position: relative;
-  background: var(--qz-card);
-  border: 1px solid var(--qz-border);
-  border-radius: var(--el-border-radius-base);
-  padding: 8px 10px 22px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  user-select: none;
-}
-.palette-item:hover {
-  border-color: var(--el-color-primary-light-5);
-  box-shadow: 0 0 0 2px var(--qz-primary-soft);
-}
-.add-hint {
-  position: absolute;
-  right: 8px;
-  bottom: 4px;
-  font-size: 11px;
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-.name {
-  font-size: 13px;
-  font-weight: 600;
-}
-.sub {
-  font-size: 11px;
-  color: #64748b;
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .canvas-panel {
   width: 0;
@@ -1385,12 +1309,6 @@ onBeforeUnmount(() => {
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 13px;
-  color: var(--qz-text-muted);
-}
-.palette-empty {
-  margin-top: 24px;
-  text-align: center;
   font-size: 13px;
   color: var(--qz-text-muted);
 }

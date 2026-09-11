@@ -11,6 +11,9 @@ import {
   objectToKvRows,
   previewKeyCount,
   validateTriggerPayload,
+  examplePayloadFromSchema,
+  schemaFieldGuide,
+  annotateCurlWithFields,
 } from './triggerInput.js'
 import { schemaToFields } from './schema.js'
 
@@ -156,5 +159,29 @@ assert.equal(
 
 assert.equal(previewKeyCount({ a: 1, b: 2 }), 2)
 assert.equal(formatTriggerPreview({ a: 1 }).includes('"a"'), true)
+
+assert.deepEqual(
+  examplePayloadFromSchema({
+    type: 'object',
+    required: ['userId'],
+    properties: {
+      userId: { type: 'string', description: '用户 ID' },
+      count: { type: 'integer', default: 3 },
+    },
+  }),
+  { userId: '10001', count: 3 },
+)
+
+const guide = schemaFieldGuide({
+  type: 'object',
+  required: ['userId'],
+  properties: { userId: { type: 'string', description: '用户 ID' } },
+})
+assert.equal(guide[0].required, true)
+assert.equal(guide[0].example, '10001')
+assert.equal(
+  annotateCurlWithFields('curl http://x', guide).startsWith('# userId 用户 ID · 必填 · string'),
+  true,
+)
 
 console.log('triggerInput unit tests passed')

@@ -123,38 +123,39 @@
           </nav>
 
           <section v-show="leftTab === 'add'" ref="quickAddRef" class="quick-add">
+            <p class="quick-hint">从组件库挑选接口，添加到调用链末尾</p>
             <el-input
               v-model="pickerKeyword"
               size="default"
-              placeholder="搜索接口名称"
+              placeholder="搜索接口名称 / 编码"
               clearable
               class="quick-search"
             />
-            <div v-if="!filteredComponents.length" class="quick-empty">没有匹配的接口</div>
-            <div v-else class="quick-list">
-              <button
-                v-for="item in filteredComponents.slice(0, quickAddLimit)"
-                :key="item.id"
-                type="button"
-                class="quick-item"
-                @click="pickComponent(item)"
-              >
-                <span class="quick-main">
-                  <span class="quick-name">{{ item.componentName }}</span>
-                  <span class="quick-sub">{{ item.httpMethod }} {{ item.urlPath || item.urlTemplate }}</span>
-                </span>
-                <span class="quick-add-btn">添加</span>
-              </button>
+            <div v-if="!components.length" class="quick-empty">
+              <p>还没有接口组件</p>
+              <el-button type="primary" size="small" @click="router.push('/components')">去接入接口</el-button>
             </div>
-            <el-button
-              v-if="filteredComponents.length > quickAddLimit"
-              text
-              type="primary"
-              class="show-more"
-              @click="quickAddLimit += 10"
-            >
-              显示更多（还有 {{ filteredComponents.length - quickAddLimit }} 个）
-            </el-button>
+            <div v-else-if="!groupedComponents.length" class="quick-empty">没有匹配的接口</div>
+            <div v-else>
+              <div v-for="group in groupedComponents" :key="group.key" class="quick-group">
+                <div class="quick-group-name">{{ group.label }}</div>
+                <div class="quick-list">
+                  <button
+                    v-for="item in group.items"
+                    :key="item.id"
+                    type="button"
+                    class="quick-item"
+                    @click="pickComponent(item)"
+                  >
+                    <span class="quick-main">
+                      <span class="quick-name">{{ item.componentName }}</span>
+                      <span class="quick-sub">{{ item.httpMethod }} {{ item.urlPath || item.urlTemplate }}</span>
+                    </span>
+                    <span class="quick-add-btn">添加</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </section>
         </div>
       </div>
@@ -264,8 +265,10 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import WorkflowParamField from './WorkflowParamField.vue'
 import { isFieldConfigured } from '@/utils/workflowBinding'
+import { CATEGORY_LABEL } from '@/utils/schema'
 
 const props = defineProps({
   chainNodes: { type: Array, default: () => [] },
@@ -283,9 +286,9 @@ const props = defineProps({
 
 const emit = defineEmits(['select', 'remove', 'move', 'add', 'update-name', 'update-bindings', 'try-run', 'publish', 'toggle-canvas'])
 
+const router = useRouter()
 const leftTab = ref('add')
 const pickerKeyword = ref('')
-const quickAddLimit = ref(12)
 const quickAddRef = ref(null)
 const leftScrollRef = ref(null)
 const showOptional = ref(false)
@@ -312,6 +315,17 @@ const filteredComponents = computed(() => {
   return props.components.filter((item) =>
     `${item.componentName}${item.componentCode}`.includes(kw),
   )
+})
+const groupedComponents = computed(() => {
+  const map = new Map()
+  for (const item of filteredComponents.value) {
+    const key = item.category || 'HTTP'
+    if (!map.has(key)) {
+      map.set(key, { key, label: CATEGORY_LABEL[key] || key, items: [] })
+    }
+    map.get(key).items.push(item)
+  }
+  return [...map.values()]
 })
 
 watch(() => props.selectedId, async (id) => {
@@ -399,7 +413,7 @@ function focusQuickAdd() {
   overflow: hidden;
 }
 .left-column {
-  width: 340px;
+  width: 360px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -578,7 +592,20 @@ function focusQuickAdd() {
 .quick-add {
   padding: 12px;
 }
+.quick-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--qz-text-muted);
+  line-height: 1.45;
+}
 .quick-search { margin-bottom: 10px; }
+.quick-group { margin-bottom: 14px; }
+.quick-group-name {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--qz-text-muted);
+}
 .quick-list {
   display: flex;
   flex-direction: column;
@@ -626,8 +653,11 @@ function focusQuickAdd() {
   text-align: center;
   font-size: 13px;
   color: var(--qz-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
 }
-.show-more { margin-top: 8px; }
 .step-config {
   flex: 1;
   min-width: 0;

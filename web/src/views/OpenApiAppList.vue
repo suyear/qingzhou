@@ -349,6 +349,23 @@
                 />
               </el-select>
             </el-form-item>
+            <div v-if="invokeFieldGuide.length" class="field-guide">
+              <div class="field-guide-head">
+                <strong>入参字段说明</strong>
+                <el-button type="primary" link @click="fillInvokeExample">填入示例</el-button>
+              </div>
+              <ul class="field-guide-list">
+                <li v-for="field in invokeFieldGuide" :key="field.key">
+                  <code>{{ field.key }}</code>
+                  <span>{{ field.label }}</span>
+                  <el-tag size="small" :type="field.required ? 'danger' : 'info'" effect="plain">
+                    {{ field.required ? '必填' : '可选' }}
+                  </el-tag>
+                  <span class="muted">{{ field.type }} · 例 {{ formatExample(field.example) }}</span>
+                </li>
+              </ul>
+            </div>
+            <p v-else class="hint">该工作流未预定义入参，可用下方键值对或 JSON 自行添加。</p>
             <el-form-item label="触发入参">
               <ScheduleTriggerInput
                 ref="invokeInputRef"
@@ -386,8 +403,9 @@
                   <span class="result-title">可复制到终端或 Postman</span>
                   <el-button type="primary" link @click="copyCurl">复制 curl</el-button>
                 </div>
-                <pre>{{ preview.curl }}</pre>
+                <pre>{{ annotatedCurl }}</pre>
                 <p v-if="preview.tip" class="hint">{{ preview.tip }}</p>
+                <p class="hint">curl 上方注释来自工作流 schema，复制后可直接给对接同学。</p>
               </div>
               <el-empty v-else description="点击「生成 curl」或试调成功后自动出现" :image-size="72" />
             </el-tab-pane>
@@ -411,6 +429,7 @@ import OpenApiDocsPanel from '@/components/OpenApiDocsPanel.vue'
 import ScheduleTriggerInput from '@/components/schedule/ScheduleTriggerInput.vue'
 import { askConfirm } from '@/utils/confirm'
 import { copyText, formatTime } from '@/utils/format'
+import { annotateCurlWithFields, examplePayloadFromSchema, schemaFieldGuide } from '@/utils/triggerInput'
 import { pageWorkflows } from '@/api/workflow'
 import {
   bindOpenapiWorkflows,
@@ -481,6 +500,10 @@ const invokeWorkflows = computed(() => {
 const selectedInvokeWorkflow = computed(() =>
   invokeWorkflows.value.find((item) => item.workflowCode === invokeForm.workflowCode) || null,
 )
+
+const invokeFieldGuide = computed(() => schemaFieldGuide(selectedInvokeWorkflow.value?.inputSchema))
+
+const annotatedCurl = computed(() => annotateCurlWithFields(preview.value?.curl, invokeFieldGuide.value))
 
 const filteredGrantWorkflows = computed(() => {
   const q = grantKeyword.value.trim().toLowerCase()
@@ -748,6 +771,17 @@ function openGrantFromInvoke() {
   if (invokeApp.value) openGrant(invokeApp.value)
 }
 
+function fillInvokeExample() {
+  const example = examplePayloadFromSchema(selectedInvokeWorkflow.value?.inputSchema)
+  invokeInputData.value = Object.keys(example).length ? example : null
+  ElMessage.success('已填入示例入参，可按实际值修改')
+}
+
+function formatExample(value) {
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
 function parseInvokeInput() {
   const inputError = invokeInputRef.value?.validate?.()
   if (inputError) {
@@ -817,8 +851,8 @@ function formatJson(value) {
 }
 
 async function copyCurl() {
-  if (!preview.value?.curl) return
-  await copyText(preview.value.curl)
+  if (!annotatedCurl.value) return
+  await copyText(annotatedCurl.value)
   ElMessage.success('已复制 curl')
 }
 
@@ -1036,6 +1070,39 @@ onMounted(async () => {
   color: var(--qz-text-muted);
 }
 .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.field-guide {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--qz-border);
+  border-radius: 8px;
+  background: var(--qz-fill);
+}
+.field-guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.field-guide-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.field-guide-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.field-guide-list code {
+  font-family: ui-monospace, Menlo, monospace;
+  background: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
 .invoke-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);

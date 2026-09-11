@@ -1,5 +1,5 @@
 import { fieldLabel } from './workflowBinding.js'
-import { parseJson } from './schema.js'
+import { parseJson, schemaToFields } from './schema.js'
 
 export function emptyKvRow() {
   return { key: '', value: '' }
@@ -199,4 +199,49 @@ export function formatTriggerPreview(value) {
 export function previewKeyCount(value) {
   if (!value || typeof value !== 'object') return 0
   return Object.keys(value).length
+}
+
+export function exampleValueForField(field) {
+  if (field?.default != null) return field.default
+  if (field?.enums?.length) return field.enums[0]
+  const type = field?.type || 'string'
+  if (type === 'integer') return 1
+  if (type === 'number') return 1.5
+  if (type === 'boolean') return true
+  if (type === 'array') return ['example']
+  if (type === 'object') return { id: 1 }
+  const key = String(field?.key || '')
+  if (/id$/i.test(key) || key.toLowerCase().includes('userid')) return '10001'
+  return 'example'
+}
+
+export function examplePayloadFromSchema(schema) {
+  const fields = schemaToFields(schema)
+  const result = {}
+  for (const field of fields) {
+    result[field.key] = exampleValueForField(field)
+  }
+  return result
+}
+
+export function schemaFieldGuide(schema) {
+  return schemaToFields(schema).map((field) => ({
+    key: field.key,
+    label: fieldLabel(field),
+    required: Boolean(field.required),
+    type: field.type || 'string',
+    example: exampleValueForField(field),
+  }))
+}
+
+export function annotateCurlWithFields(curl, fields) {
+  const text = String(curl || '').trim()
+  if (!text) return ''
+  if (!fields?.length) return text
+  const notes = fields.map((field) => {
+    const flag = field.required ? '必填' : '可选'
+    const label = field.label && field.label !== field.key ? ` ${field.label}` : ''
+    return `# ${field.key}${label} · ${flag} · ${field.type}`
+  })
+  return `${notes.join('\n')}\n${text}`
 }
