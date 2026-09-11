@@ -180,7 +180,7 @@ const guide = schemaFieldGuide({
 assert.equal(guide[0].required, true)
 assert.equal(guide[0].example, '10001')
 assert.equal(
-  annotateCurlWithFields('curl http://x', guide).startsWith('# userId 用户 ID · 必填 · string'),
+  annotateCurlWithFields('curl http://x', guide).startsWith('# userId 用户 ID · 必填 · string · 例 10001'),
   true,
 )
 

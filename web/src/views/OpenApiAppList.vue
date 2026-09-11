@@ -802,8 +802,23 @@ async function makePreview() {
     ElMessage.warning('请先选择工作流')
     return
   }
-  const input = parseInvokeInput()
-  if (input == null) return
+  let input = invokeInputRef.value?.getPayload?.()
+  const empty = !input || typeof input !== 'object' || !Object.keys(input).length
+  if (empty) {
+    const example = examplePayloadFromSchema(selectedInvokeWorkflow.value?.inputSchema)
+    if (Object.keys(example).length) {
+      invokeInputData.value = example
+      input = example
+    } else {
+      input = {}
+    }
+  } else {
+    const inputError = invokeInputRef.value?.validate?.()
+    if (inputError) {
+      ElMessage.warning(inputError)
+      return
+    }
+  }
   previewing.value = true
   try {
     const res = await previewOpenapiInvoke(invokeApp.value.id, {

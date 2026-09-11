@@ -41,8 +41,8 @@
       <div class="flow-step" :class="{ done: statTotal > 0 }">
         <span class="flow-badge">1</span>
         <div class="flow-body">
-          <strong>拖拽编排</strong>
-            <p>点击接口添加步骤并配置参数</p>
+          <strong>添加步骤</strong>
+            <p>从「添加接口」点选组件，配置参数组成调用链</p>
           <el-button type="primary" link @click="goCreate">新建工作流</el-button>
         </div>
       </div>
@@ -248,7 +248,7 @@ const statPublished = computed(() => statRecords.value.filter((item) => item.sta
 const statDisabled = computed(() => statRecords.value.filter((item) => item.status === 'DISABLED').length)
 const emptyText = computed(() => {
   if (keyword.value || statusFilter.value) return '没有匹配的工作流'
-  return '还没有工作流，从设计器开始拖一条调用链'
+  return '还没有工作流，打开设计器后从「添加接口」点选第一步'
 })
 
 function dismissGuide() {

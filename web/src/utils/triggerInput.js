@@ -234,6 +234,12 @@ export function schemaFieldGuide(schema) {
   }))
 }
 
+function formatGuideExample(value) {
+  if (value == null) return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
 export function annotateCurlWithFields(curl, fields) {
   const text = String(curl || '').trim()
   if (!text) return ''
@@ -241,7 +247,8 @@ export function annotateCurlWithFields(curl, fields) {
   const notes = fields.map((field) => {
     const flag = field.required ? '必填' : '可选'
     const label = field.label && field.label !== field.key ? ` ${field.label}` : ''
-    return `# ${field.key}${label} · ${flag} · ${field.type}`
+    const example = field.example != null ? ` · 例 ${formatGuideExample(field.example)}` : ''
+    return `# ${field.key}${label} · ${flag} · ${field.type}${example}`
   })
   return `${notes.join('\n')}\n${text}`
 }
