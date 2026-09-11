@@ -30,12 +30,12 @@
     <PageState v-if="pageTab === 'apps'" :error="loadError" @retry="load" />
 
     <template v-if="pageTab === 'apps'">
-      <div class="stat-grid">
+      <div class="stat-grid cols-3">
         <div class="stat-card">
           <div class="stat-label">开放应用</div>
           <div class="stat-num">{{ stats.apps }}</div>
         </div>
-        <div class="stat-card stat-card-ok">
+        <div class="stat-card stat-ok">
           <div class="stat-label">可对外调用</div>
           <div class="stat-num">{{ stats.ready }}</div>
           <div class="stat-hint">已启用且已授权工作流</div>
@@ -104,7 +104,7 @@
           </el-table-column>
           <el-table-column label="就绪状态" width="120">
             <template #default="{ row }">
-              <el-tag :type="readinessTag(row).type" size="small">{{ readinessTag(row).label }}</el-tag>
+              <StatusTag :type="readinessTag(row).type" :label="readinessTag(row).label" />
             </template>
           </el-table-column>
           <el-table-column label="授权" width="88" align="center">
@@ -168,10 +168,8 @@
     <el-drawer v-model="drawerVisible" :title="drawerApp?.appName || '应用详情'" size="440px" destroy-on-close>
       <template v-if="drawerApp">
         <div class="drawer-head">
-          <el-tag :type="drawerApp.status === 1 ? 'success' : 'info'" size="small">
-            {{ drawerApp.status === 1 ? '启用' : '停用' }}
-          </el-tag>
-          <el-tag :type="readinessTag(drawerApp).type" size="small">{{ readinessTag(drawerApp).label }}</el-tag>
+          <StatusTag kind="enable" :value="drawerApp.status" />
+          <StatusTag :type="readinessTag(drawerApp).type" :label="readinessTag(drawerApp).label" />
         </div>
 
         <div class="checklist">
@@ -430,6 +428,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import OpenApiDocsPanel from '@/components/OpenApiDocsPanel.vue'
 import ScheduleTriggerInput from '@/components/schedule/ScheduleTriggerInput.vue'
 import { askConfirm } from '@/utils/confirm'
@@ -924,22 +923,6 @@ onMounted(async () => {
   color: var(--el-color-primary);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.stat-card {
-  padding: 14px 16px;
-  border: 1px solid var(--qz-border);
-  border-radius: var(--qz-radius);
-  background: var(--qz-card);
-}
-.stat-card-ok { border-color: var(--el-color-success-light-5); }
-.stat-label { font-size: 12px; color: var(--qz-text-muted); }
-.stat-num { margin-top: 4px; font-size: 26px; font-weight: 700; line-height: 1.2; }
-.stat-hint { margin-top: 4px; font-size: 11px; color: var(--qz-text-muted); }
 .flow-strip {
   position: relative;
   display: flex;
@@ -1159,7 +1142,6 @@ onMounted(async () => {
 }
 .result-title { font-size: 13px; font-weight: 600; }
 @media (max-width: 900px) {
-  .stat-grid { grid-template-columns: 1fr; }
   .flow-strip { flex-direction: column; padding-right: 14px; }
   .flow-arrow { display: none; }
   .grant-grid { grid-template-columns: 1fr; }

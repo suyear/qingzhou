@@ -26,7 +26,8 @@ defineEmits(['retry'])
 
 <style scoped>
 .page-state-alert {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  border-radius: 10px;
 }
 .page-state-body {
   display: flex;

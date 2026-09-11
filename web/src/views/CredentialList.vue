@@ -49,11 +49,9 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column label="状态" width="110">
         <template #default="{ row }">
-          <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
-            {{ row.status === 1 ? '启用' : '停用' }}
-          </el-tag>
+          <StatusTag kind="enable" :value="row.status" />
         </template>
       </el-table-column>
       <el-table-column label="操作" width="260" fixed="right">
@@ -169,6 +167,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import { askConfirm } from '@/utils/confirm'
 import { pageWorkflows } from '@/api/workflow'
 import { networkErrorMessage } from '@/api/http'

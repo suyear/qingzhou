@@ -1,24 +1,30 @@
 <template>
-  <div v-loading="loading">
-    <PageHeader title="工作台" desc="从编排、调度到开放调用的总览。先配组件和凭证，再画工作流。" />
+  <div>
+    <PageHeader title="工作台" desc="从编排、调度到开放调用的总览。先配组件和凭证，再画工作流。">
+      <el-radio-group v-model="days" size="small" @change="loadDashboard">
+        <el-radio-button :value="7">近 7 日</el-radio-button>
+        <el-radio-button :value="14">近 14 日</el-radio-button>
+        <el-radio-button :value="30">近 30 日</el-radio-button>
+      </el-radio-group>
+    </PageHeader>
     <PageState :error="loadError" @retry="load" />
-    <div class="stat-grid">
+    <div class="stat-grid" v-loading="loading && !overview">
       <button class="stat-card" @click="$router.push('/components')">
         <div class="stat-label">接口组件</div>
-        <div class="stat-num">{{ displayNum(stats.components) }}</div>
+        <div class="stat-num">{{ displayNum(summary.components) }}</div>
       </button>
       <button class="stat-card" @click="$router.push('/workflows')">
         <div class="stat-label">工作流</div>
-        <div class="stat-num">{{ displayNum(stats.workflows) }}</div>
+        <div class="stat-num">{{ displayNum(summary.workflows) }}</div>
       </button>
-      <button class="stat-card" title="按最近执行记录估算" @click="$router.push('/executions')">
+      <button class="stat-card" @click="$router.push('/executions')">
         <div class="stat-label">今日执行</div>
-        <div class="stat-num">{{ displayNum(stats.today) }}</div>
-        <div class="stat-hint">最近 100 条估算</div>
+        <div class="stat-num">{{ displayNum(summary.todayExecutions) }}</div>
+        <div class="stat-hint">{{ successHint }}</div>
       </button>
-      <button class="stat-card" @click="$router.push('/schedules')">
+      <button class="stat-card stat-ok" @click="$router.push('/schedules')">
         <div class="stat-label">运行中的调度</div>
-        <div class="stat-num">{{ displayNum(stats.runningJobs) }}</div>
+        <div class="stat-num">{{ displayNum(summary.runningJobs) }}</div>
       </button>
     </div>
     <div class="quick">
@@ -28,7 +34,7 @@
       <el-button @click="$router.push('/openapi')">开放平台</el-button>
     </div>
     <el-alert
-      v-if="!loading && !loadError && !stats.components"
+      v-if="!loading && !loadError && !summary.components"
       class="guide-alert"
       type="info"
       show-icon
@@ -38,16 +44,62 @@
     >
       <el-button type="primary" size="small" @click="$router.push('/components')">去接入</el-button>
     </el-alert>
+
+    <div class="qz-chart-grid">
+      <ChartPanel
+        title="执行次数趋势"
+        :desc="`近 ${days} 日工作流执行量`"
+        :option="trendChart"
+        :loading="chartLoading"
+        :error="chartError"
+        :empty="!hasTrend"
+        empty-text="这段时间还没有执行记录"
+        @retry="loadDashboard"
+      />
+      <ChartPanel
+        title="成功 / 失败占比"
+        desc="仅统计已结束的执行"
+        :option="statusChart"
+        :loading="chartLoading"
+        :error="chartError"
+        :empty="!hasStatus"
+        empty-text="暂无成功或失败数据"
+        @retry="loadDashboard"
+      />
+      <ChartPanel
+        title="触发类型分布"
+        desc="试运行 / 调度 / 开放调用"
+        :option="triggerChart"
+        :loading="chartLoading"
+        :error="chartError"
+        :empty="!hasTrigger"
+        empty-text="暂无触发记录"
+        @retry="loadDashboard"
+      />
+      <ChartPanel
+        title="热门工作流"
+        desc="区间内执行次数 Top 5"
+        :option="topWorkflowChart"
+        :loading="chartLoading"
+        :error="chartError"
+        :empty="!hasTopWorkflows"
+        empty-text="还没有可统计的工作流"
+        @retry="loadDashboard"
+      />
+    </div>
+
     <div class="qz-panel recent">
       <div class="recent-head">
-        <h3>最近运行</h3>
+        <div>
+          <h3>最近运行</h3>
+          <p class="sub">点击行查看执行记录</p>
+        </div>
         <el-button type="primary" link @click="$router.push('/executions')">全部记录</el-button>
       </div>
       <el-table
         v-if="recent.length"
         class="qz-table"
         :data="recent"
-        size="small"
         stripe
         style="cursor: pointer"
         @row-click="goRecent"
@@ -56,12 +108,14 @@
         <el-table-column label="工作流" min-width="140">
           <template #default="{ row }">{{ row.workflowName || row.workflowId }}</template>
         </el-table-column>
-        <el-table-column label="触发" width="100">
-          <template #default="{ row }">{{ triggerLabel(row.triggerType) }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="触发" width="110">
           <template #default="{ row }">
-            <el-tag size="small" :type="execStatusType(row.status)">{{ execStatusLabel(row.status) }}</el-tag>
+            <StatusTag kind="trigger" :value="row.triggerType" />
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <StatusTag kind="exec" :value="row.status" />
           </template>
         </el-table-column>
         <el-table-column label="时间" min-width="160">
@@ -76,58 +130,91 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
-import { pageComponents } from '@/api/component'
-import { pageWorkflows } from '@/api/workflow'
+import ChartPanel from '@/components/ChartPanel.vue'
+import StatusTag from '@/components/StatusTag.vue'
+import { getDashboardOverview } from '@/api/dashboard'
 import { pageExecutions } from '@/api/execution'
-import { pageScheduleJobs } from '@/api/schedule'
 import { networkErrorMessage } from '@/api/http'
-import { execStatusLabel, execStatusType, formatTime, triggerLabel } from '@/utils/format'
+import { formatTime } from '@/utils/format'
+import {
+  STATUS_COLOR,
+  TRIGGER_COLOR,
+  barOption,
+  hasChartData,
+  rankBarOption,
+  sharePieOption,
+  trendOption,
+} from '@/utils/charts'
 
 const router = useRouter()
+const days = ref(7)
 const loading = ref(false)
+const chartLoading = ref(false)
 const loadError = ref('')
+const chartError = ref('')
 const recent = ref([])
-const stats = reactive({
+const overview = ref(null)
+
+const summary = computed(() => overview.value?.summary || {
   components: null,
   workflows: null,
-  today: null,
+  todayExecutions: null,
   runningJobs: null,
+  successRate: null,
+  rangeTotal: 0,
 })
+
+const successHint = computed(() => {
+  const rate = summary.value.successRate
+  if (rate == null) return '区间成功率 —'
+  return `近 ${days.value} 日成功率 ${rate}%`
+})
+
+const hasTrend = computed(() => hasChartData(overview.value?.trend || [], 'total'))
+const hasStatus = computed(() => hasChartData(overview.value?.statusShare))
+const hasTrigger = computed(() => hasChartData(overview.value?.triggerShare))
+const hasTopWorkflows = computed(() => hasChartData(overview.value?.topWorkflows || [], 'total'))
+
+const trendChart = computed(() => trendOption(overview.value?.trend || []))
+const statusChart = computed(() => sharePieOption(overview.value?.statusShare || [], STATUS_COLOR))
+const triggerChart = computed(() => barOption(overview.value?.triggerShare || [], TRIGGER_COLOR))
+const topWorkflowChart = computed(() => rankBarOption(overview.value?.topWorkflows || []))
 
 function displayNum(value) {
   return value == null ? '—' : value
 }
 
-function isToday(value) {
-  if (!value) return false
-  const day = String(value).slice(0, 10)
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return day === `${y}-${m}-${d}`
+async function loadDashboard() {
+  chartLoading.value = true
+  chartError.value = ''
+  try {
+    const res = await getDashboardOverview({ days: days.value })
+    overview.value = res.data || null
+  } catch (error) {
+    chartError.value = networkErrorMessage(error)
+    overview.value = null
+  } finally {
+    chartLoading.value = false
+  }
+}
+
+async function loadRecent() {
+  const execs = await pageExecutions({ current: 1, size: 5 })
+  recent.value = execs.data?.records || []
 }
 
 async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [comps, wfs, execs, jobs] = await Promise.all([
-      pageComponents({ current: 1, size: 1 }),
-      pageWorkflows({ current: 1, size: 1 }),
-      pageExecutions({ current: 1, size: 100 }),
-      pageScheduleJobs({ current: 1, size: 100 }),
-    ])
-    stats.components = Number(comps.data?.total || 0)
-    stats.workflows = Number(wfs.data?.total || 0)
-    const execRecords = execs.data?.records || []
-    recent.value = execRecords.slice(0, 5)
-    stats.today = execRecords.filter((item) => isToday(item.startTime || item.createTime)).length
-    stats.runningJobs = (jobs.data?.records || []).filter((item) => item.status === 1).length
+    await Promise.all([loadDashboard(), loadRecent()])
+    if (chartError.value) {
+      loadError.value = chartError.value
+    }
   } catch (error) {
     loadError.value = networkErrorMessage(error)
     recent.value = []
@@ -144,44 +231,11 @@ function goRecent(row) {
 </script>
 
 <style scoped>
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.stat-card {
-  text-align: left;
-  border: 1px solid var(--qz-border);
-  background: var(--qz-card);
-  border-radius: var(--qz-radius);
-  box-shadow: var(--qz-shadow);
-  padding: 16px 18px;
-  cursor: pointer;
-}
-.stat-card:hover {
-  border-color: var(--el-color-primary-light-5);
-  box-shadow: 0 0 0 3px var(--qz-primary-soft);
-}
-.stat-label {
-  color: var(--qz-text-muted);
-  font-size: 13px;
-}
-.stat-num {
-  margin-top: 6px;
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--qz-text);
-}
-.stat-hint {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--qz-text-muted);
-}
 .quick {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 .guide-alert {
   margin-bottom: 16px;
@@ -189,8 +243,8 @@ function goRecent(row) {
 .recent-head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 14px 16px 0;
+  align-items: flex-start;
+  padding: 16px 16px 8px;
 }
 .recent :deep(.el-empty) {
   padding: 24px 16px 32px;
@@ -198,8 +252,9 @@ function goRecent(row) {
 .recent-head h3 {
   margin: 0;
   font-size: 15px;
+  font-weight: 650;
 }
-@media (max-width: 960px) {
-  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.recent-head .sub {
+  margin: 4px 0 0;
 }
 </style>

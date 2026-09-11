@@ -24,12 +24,12 @@
       @close="showModeHint = false"
     />
 
-    <div class="stat-grid">
+    <div class="stat-grid cols-3">
       <div class="stat-card">
         <div class="stat-label">全部任务</div>
         <div class="stat-num">{{ stats.total }}</div>
       </div>
-      <div class="stat-card stat-card-ok">
+      <div class="stat-card stat-ok">
         <div class="stat-label">运行中</div>
         <div class="stat-num">{{ stats.running }}</div>
       </div>
@@ -54,11 +54,9 @@
             <div class="rule-text">{{ scheduleSummary(row) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
-              {{ row.status === 1 ? '运行中' : '已停止' }}
-            </el-tag>
+            <StatusTag kind="job" :value="row.status" />
           </template>
         </el-table-column>
         <el-table-column label="下次触发" min-width="150">
@@ -177,6 +175,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import ScheduleRuleEditor from '@/components/schedule/ScheduleRuleEditor.vue'
 import ScheduleTriggerInput from '@/components/schedule/ScheduleTriggerInput.vue'
 import { askConfirm } from '@/utils/confirm'
@@ -465,37 +464,14 @@ onMounted(boot)
 
 <style scoped>
 .mode-alert { margin-bottom: 12px; }
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-}
-.stat-card {
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: var(--el-fill-color-light);
-}
-.stat-card-ok {
-  background: var(--el-color-success-light-9);
-}
-.stat-label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-.stat-num {
-  margin-top: 4px;
-  font-size: 24px;
-  font-weight: 700;
-}
 .rule-text {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--el-text-color-regular);
+  color: var(--qz-text-secondary);
 }
 .sub {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--qz-text-muted);
 }
 </style>
 
