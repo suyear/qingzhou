@@ -315,7 +315,7 @@ const filteredComponents = computed(() => {
 })
 
 watch(() => props.selectedId, async (id) => {
-  showOptional.value = optionalFields.value.length > 0 && optionalFields.value.length <= 2
+  showOptional.value = false
   if (!id) return
   leftTab.value = 'steps'
   await nextTick()
