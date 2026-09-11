@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="接口组件" desc="接入外部 HTTP 接口：新建 → 填地址或粘贴 curl → 试连通 → 在设计器拖入使用。预置企微组件不能删、不能改编码。">
+    <PageHeader title="接口组件" desc="接入 HTTP 接口或数据库脚本，保存后即可在设计器拖入工作流。预置企微组件不能删、不能改编码。">
       <el-select v-model="category" placeholder="全部分类" clearable style="width: 140px" @change="reload">
         <el-option v-for="item in categoryOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
@@ -10,6 +10,8 @@
       </el-select>
       <el-select v-model="httpMethod" placeholder="全部方法" clearable style="width: 110px" @change="reload">
         <el-option v-for="m in methods" :key="m" :label="m" :value="m" />
+        <el-option label="QUERY" value="QUERY" />
+        <el-option label="UPDATE" value="UPDATE" />
       </el-select>
       <el-input
         v-model="keyword"
@@ -25,6 +27,7 @@
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="easy">接入接口（推荐）</el-dropdown-item>
+            <el-dropdown-item command="sql">数据库脚本</el-dropdown-item>
             <el-dropdown-item command="curl">展开 curl 快捷导入</el-dropdown-item>
             <el-dropdown-item command="health">先体验一下</el-dropdown-item>
             <el-dropdown-item command="manual">高级手动配置</el-dropdown-item>
@@ -44,7 +47,7 @@
     >
       <template #title>外部接口接入 · 推荐流程</template>
       <div class="guide-steps">
-        <span>① 新建组件，<strong>填地址</strong>或<strong>粘贴 curl</strong> 均可</span>
+        <span>① 新建组件，<strong>填地址</strong>、<strong>粘贴 curl</strong> 或写<strong>数据库脚本</strong></span>
         <span>② 确认信息后点<strong>试连通</strong></span>
         <span>③ 在工作流设计器左侧组件库拖入画布</span>
         <el-button class="guide-action" type="primary" size="small" @click="openCreate('easy')">立即接入</el-button>
@@ -75,12 +78,12 @@
         </el-table-column>
         <el-table-column label="方法" width="90">
           <template #default="{ row }">
-            <el-tag size="small" :type="httpMethodTagType(row.httpMethod)">{{ row.httpMethod }}</el-tag>
+            <el-tag size="small" :type="httpMethodTagType(row.httpMethod)">{{ methodLabel(row) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="路径" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
-            <span class="mono">{{ urlPath(row.urlTemplate) }}</span>
+            <span class="mono">{{ displayPath(row) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="入参" width="120">
@@ -104,7 +107,7 @@
             <div class="qz-ops">
               <el-button type="primary" link @click="openDetail(row)">详情</el-button>
               <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
-              <el-button type="primary" link @click="openTest(row)">试连通</el-button>
+              <el-button type="primary" link @click="openTest(row)">{{ isDatabaseComponent(row) ? '试运行' : '试连通' }}</el-button>
               <el-dropdown v-if="!row.isPreset" trigger="click" @command="(cmd) => onRowCommand(cmd, row)">
                 <el-button type="primary" link>更多</el-button>
                 <template #dropdown>
@@ -146,7 +149,7 @@
       <div v-if="detailRow" class="detail-stack">
         <DetailSection title="基本信息">
           <div class="detail-meta">
-            <el-tag size="small" :type="httpMethodTagType(detailRow.httpMethod)">{{ detailRow.httpMethod }}</el-tag>
+            <el-tag size="small" :type="httpMethodTagType(detailRow.httpMethod)">{{ methodLabel(detailRow) }}</el-tag>
             <el-tag size="small" type="info">{{ categoryLabel(detailRow.category) }}</el-tag>
             <el-tag size="small">{{ providerLabel(detailRow.provider) }}</el-tag>
             <el-tag size="small" :type="detailRow.isPreset ? 'warning' : 'info'">{{ detailRow.isPreset ? '预置' : '自定义' }}</el-tag>
@@ -154,10 +157,10 @@
           <DetailCopyField label="编码" :value="detailRow.componentCode" copy-message="已复制编码" />
           <DetailCodeBlock
             class="detail-url"
-            title="接口地址"
+            :title="isDatabaseComponent(detailRow) ? 'SQL 脚本' : '接口地址'"
             :value="detailRow.urlTemplate"
-            copy-message="已复制地址"
-            max-height="120px"
+            :copy-message="isDatabaseComponent(detailRow) ? '已复制 SQL' : '已复制地址'"
+            max-height="180px"
           />
           <DetailMetaList class="detail-meta-list" :items="detailMetaItems" />
         </DetailSection>
@@ -168,7 +171,7 @@
         />
         <DetailSchemaTable
           v-if="detailBodyFields.length"
-          title="Body 入参"
+          :title="isDatabaseComponent(detailRow) ? 'SQL 入参' : 'Body 入参'"
           :fields="detailBodyFields"
         />
         <DetailSection v-if="!detailQueryFields.length && !detailBodyFields.length" title="入参 Schema">
@@ -176,7 +179,7 @@
         </DetailSection>
         <LineagePanel v-if="detailRow.id" type="component" :id="detailRow.id" />
         <DetailActions>
-          <el-button type="primary" @click="openTest(detailRow)">试连通</el-button>
+          <el-button type="primary" @click="openTest(detailRow)">{{ isDatabaseComponent(detailRow) ? '试运行 SQL' : '试连通' }}</el-button>
           <el-button @click="openEdit(detailRow)">编辑</el-button>
         </DetailActions>
       </div>
@@ -204,13 +207,21 @@
         class="mode-alert"
       />
       <el-alert
-        v-if="urlNeedsToken"
+        v-if="isDbForm"
+        title="数据库组件：命名参数走 PreparedStatement。只读模式禁止写语句，默认不能一次执行多条 SQL。"
+        type="info"
+        :closable="false"
+        class="mode-alert"
+      />
+      <el-alert
+        v-if="urlNeedsToken && !isDbForm"
         title="此接口需要企业微信 Token，运行时会自动注入，无需手填。"
         type="info"
         :closable="false"
         class="mode-alert"
       />
-      <el-tabs v-if="!presetLocked" v-model="editTab">
+      <DatabaseSqlPanel v-if="isDbForm && !presetLocked" :form="form" />
+      <el-tabs v-else-if="!presetLocked" v-model="editTab">
         <el-tab-pane label="基础信息" name="basic">
           <ComponentCurlImport @import="onCurlImportEdit" />
           <el-form label-position="top">
@@ -337,13 +348,13 @@
           <div v-if="field.description" class="field-hint">{{ field.description }}</div>
         </el-form-item>
         <el-form-item v-if="!testFields.length" label="入参">
-          <span class="muted">该组件没有声明入参，将按 URL 直接请求</span>
+          <span class="muted">{{ isDatabaseComponent(testRow) ? '该 SQL 没有命名参数，将直接执行' : '该组件没有声明入参，将按 URL 直接请求' }}</span>
         </el-form-item>
       </el-form>
       <DetailResultBanner
         v-if="testResult"
         :ok="testResult.success"
-        :title="testResult.success ? '连通成功' : '连通失败'"
+        :title="testResult.success ? (isDatabaseComponent(testRow) ? '执行成功' : '连通成功') : (isDatabaseComponent(testRow) ? '执行失败' : '连通失败')"
         :message="testResult.message"
         :meta="testResultMeta"
       >
@@ -357,7 +368,9 @@
       </DetailResultBanner>
       <template #footer>
         <el-button @click="testVisible = false">关闭</el-button>
-        <el-button type="primary" :loading="testing" @click="runTest">发起请求</el-button>
+        <el-button type="primary" :loading="testing" @click="runTest">
+          {{ isDatabaseComponent(testRow) ? '执行 SQL' : '发起请求' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -373,6 +386,7 @@ import LineagePanel from '@/components/LineagePanel.vue'
 import ComponentAuthPanel from '@/components/ComponentAuthPanel.vue'
 import ComponentCreateWizard from '@/components/ComponentCreateWizard.vue'
 import ComponentCurlImport from '@/components/ComponentCurlImport.vue'
+import DatabaseSqlPanel from '@/components/DatabaseSqlPanel.vue'
 import DetailSection from '@/components/detail/DetailSection.vue'
 import DetailCopyField from '@/components/detail/DetailCopyField.vue'
 import DetailCodeBlock from '@/components/detail/DetailCodeBlock.vue'
@@ -407,6 +421,7 @@ import {
   schemaToFields,
   urlPath,
 } from '@/utils/schema'
+import { compactSql, isDatabaseComponent, parseDatabaseExtra } from '@/utils/sqlParams'
 
 const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 const methodOptions = [
@@ -470,22 +485,45 @@ const form = reactive({
   category: 'HTTP',
   params: [],
   authState: createEmptyAuthState(),
+  sql: '',
+  datasourceId: null,
+  accessMode: 'READ',
+  maxRows: 200,
 })
 
+const isDbForm = computed(() => form.provider === 'DATABASE' || form.category === 'DATABASE')
 const presetLocked = computed(() => Boolean(form.isPreset))
 const urlNeedsToken = computed(() => needsAccessToken({
   urlTemplate: form.urlTemplate,
   extraConfig: buildExtraConfig(form.authState),
 }))
-const testNeedsToken = computed(() => needsAccessToken(testRow.value))
+const testNeedsToken = computed(() => needsAccessToken(testRow.value) && !isDatabaseComponent(testRow.value))
 const testFields = computed(() => (testRow.value ? schemaFields(testRow.value) : []))
-const testTitle = computed(() => (testRow.value ? `试连通 · ${testRow.value.componentName}` : '试连通'))
+const testTitle = computed(() => {
+  if (!testRow.value) return '试连通'
+  return isDatabaseComponent(testRow.value)
+    ? `试运行 SQL · ${testRow.value.componentName}`
+    : `试连通 · ${testRow.value.componentName}`
+})
 const detailTitle = computed(() => (detailRow.value ? `组件详情 · ${detailRow.value.componentName}` : '组件详情'))
-const detailQueryFields = computed(() => (detailRow.value ? schemaToFields(detailRow.value.querySchema) : []))
+const detailQueryFields = computed(() => {
+  if (!detailRow.value || isDatabaseComponent(detailRow.value)) return []
+  return schemaToFields(detailRow.value.querySchema)
+})
 const detailBodyFields = computed(() => (detailRow.value ? schemaToFields(detailRow.value.bodySchema) : []))
 const detailMetaItems = computed(() => {
   const row = detailRow.value
   if (!row) return []
+  if (isDatabaseComponent(row)) {
+    const extra = parseDatabaseExtra(row)
+    return [
+      { label: '数据源 ID', value: extra.datasourceId ? String(extra.datasourceId) : '—' },
+      { label: '访问模式', value: extra.accessMode === 'WRITE' ? '允许写入' : '只读查询' },
+      { label: '最多行数', value: String(extra.maxRows || 200) },
+      { label: '超时', value: `${row.timeoutMs}ms` },
+      { label: '说明', value: row.description, hidden: !row.description },
+    ]
+  }
   const auth = needsAccessToken(row) ? '企业微信 Token' : authSummary(row)
   return [
     { label: '鉴权', value: auth, hidden: !auth },
@@ -498,7 +536,7 @@ const testResultMeta = computed(() => {
   const result = testResult.value
   if (!result) return ''
   const parts = [`${result.requestMethod || ''} ${result.requestUrl || '-'}`]
-  if (result.httpStatus) parts.push(`HTTP ${result.httpStatus}`)
+  if (result.httpStatus && !isDatabaseComponent(testRow.value)) parts.push(`HTTP ${result.httpStatus}`)
   if (result.durationMs != null) parts.push(`${result.durationMs}ms`)
   if (result.wecomErrcode != null) parts.push(`errcode ${result.wecomErrcode}`)
   return parts.filter(Boolean).join(' · ')
@@ -507,8 +545,20 @@ const emptyText = computed(() => {
   if (keyword.value || category.value || presetFilter.value || httpMethod.value) {
     return '没有匹配的组件'
   }
-  return '还没有接口组件，接入一个 HTTP 接口后即可在设计器中使用'
+  return '还没有接口组件。可接入 HTTP 接口，或把 SQL 脚本保存为数据库组件。'
 })
+
+function methodLabel(row) {
+  if (isDatabaseComponent(row)) {
+    return row.httpMethod === 'UPDATE' ? 'UPDATE' : 'QUERY'
+  }
+  return row.httpMethod || '—'
+}
+
+function displayPath(row) {
+  if (isDatabaseComponent(row)) return compactSql(row.urlTemplate)
+  return urlPath(row.urlTemplate, row)
+}
 
 function applyQuery() {
   keyword.value = route.query.keyword || ''
@@ -573,6 +623,10 @@ function resetForm() {
   form.category = 'HTTP'
   form.params = []
   form.authState = createEmptyAuthState()
+  form.sql = ''
+  form.datasourceId = null
+  form.accessMode = 'READ'
+  form.maxRows = 200
 }
 
 function dismissGuide() {
@@ -621,6 +675,11 @@ function openEdit(row) {
   form.category = row.category || 'HTTP'
   form.params = componentParamRows(row)
   form.authState = parseAuthFromComponent(row)
+  const extra = parseDatabaseExtra(row)
+  form.sql = isDatabaseComponent(row) ? (row.urlTemplate || '') : ''
+  form.datasourceId = extra.datasourceId
+  form.accessMode = extra.accessMode
+  form.maxRows = extra.maxRows
   dialogVisible.value = true
 }
 
@@ -638,6 +697,15 @@ function openClone(row) {
   form.category = row.category || 'HTTP'
   form.params = componentParamRows(row).map((item) => ({ ...item }))
   form.authState = parseAuthFromComponent(row)
+  const extra = parseDatabaseExtra(row)
+  form.sql = isDatabaseComponent(row) ? (row.urlTemplate || '') : ''
+  form.datasourceId = extra.datasourceId
+  form.accessMode = extra.accessMode
+  form.maxRows = extra.maxRows
+  if (isDatabaseComponent(row)) {
+    form.provider = 'DATABASE'
+    form.category = 'DATABASE'
+  }
   dialogVisible.value = true
 }
 
@@ -711,6 +779,45 @@ function validateCode() {
 }
 
 async function save() {
+  if (isDbForm.value) {
+    if (!form.componentName || !form.sql || !form.datasourceId) {
+      ElMessage.warning('请填写组件名称、数据源和 SQL')
+      return
+    }
+    if (!form.componentCode) {
+      form.componentCode = `custom.db.${Date.now().toString(36)}`
+    }
+    if (!validateCode()) return
+    saving.value = true
+    try {
+      const payload = {
+        componentCode: form.componentCode.trim(),
+        componentName: form.componentName.trim(),
+        provider: 'DATABASE',
+        category: 'DATABASE',
+        httpMethod: 'QUERY',
+        urlTemplate: form.sql.trim(),
+        timeoutMs: form.timeoutMs,
+        retryTimes: 0,
+        description: form.description,
+        bodySchema: fieldsToSchema(form.params),
+        extraConfig: {
+          kind: 'DATABASE',
+          datasourceId: form.datasourceId,
+          accessMode: form.accessMode,
+          maxRows: form.maxRows,
+        },
+      }
+      if (form.id) await updateComponent(form.id, payload)
+      else await createComponent(payload)
+      ElMessage.success('已保存')
+      dialogVisible.value = false
+      await load()
+    } finally {
+      saving.value = false
+    }
+    return
+  }
   if (!form.componentName || !form.urlTemplate) {
     ElMessage.warning('请填写组件名称和接口地址')
     return

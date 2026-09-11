@@ -1,3 +1,5 @@
+import { compactSql, isDatabaseComponent } from './sqlParams.js'
+
 export function parseJson(value, fallback = {}) {
   if (value == null || value === '') {
     return fallback
@@ -112,9 +114,15 @@ export function requiredParams(component) {
   return [...keys]
 }
 
-export function urlPath(urlTemplate) {
+export function urlPath(urlTemplate, component) {
+  if (isDatabaseComponent(component || { urlTemplate })) {
+    return compactSql(component?.urlTemplate || urlTemplate)
+  }
   if (!urlTemplate) {
     return ''
+  }
+  if (!/^https?:\/\//i.test(urlTemplate) && /^\s*(select|insert|update|delete|replace|with|show|describe|desc|explain)\b/i.test(urlTemplate)) {
+    return compactSql(urlTemplate)
   }
   const noQuery = urlTemplate.split('?')[0]
   try {
@@ -136,10 +144,13 @@ export function toNodeData(component) {
     componentName: component.componentName,
     httpMethod: component.httpMethod,
     urlTemplate: component.urlTemplate,
-    urlPath: urlPath(component.urlTemplate),
+    urlPath: urlPath(component.urlTemplate, component),
     timeoutMs: component.timeoutMs,
     retryTimes: component.retryTimes,
     requiredParams: requiredParams(component),
+    provider: component.provider,
+    category: component.category,
+    sqlPreview: isDatabaseComponent(component) ? compactSql(component.urlTemplate) : undefined,
   }
 }
 
@@ -148,11 +159,13 @@ export const CATEGORY_LABEL = {
   ORG: '组织架构',
   GROUP: '群聊',
   HTTP: '自定义 HTTP',
+  DATABASE: '数据库脚本',
 }
 
 export const PROVIDER_LABEL = {
   WECOM: '企业微信',
   CUSTOM: '自定义',
+  DATABASE: '数据库',
 }
 
 export function categoryLabel(value) {
@@ -171,9 +184,9 @@ export function paramStats(component) {
 
 export function httpMethodTagType(method) {
   const value = String(method || '').toUpperCase()
-  if (value === 'GET') return 'success'
+  if (value === 'GET' || value === 'QUERY') return 'success'
   if (value === 'POST') return 'primary'
-  if (value === 'PUT' || value === 'PATCH') return 'warning'
+  if (value === 'PUT' || value === 'PATCH' || value === 'UPDATE') return 'warning'
   if (value === 'DELETE') return 'danger'
   return 'info'
 }

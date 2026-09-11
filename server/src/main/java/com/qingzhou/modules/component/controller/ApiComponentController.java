@@ -35,14 +35,18 @@ public class ApiComponentController {
     @GetMapping
     public R<IPage<ApiComponent>> page(PageQuery query,
                                        @RequestParam(required = false) String category,
+                                       @RequestParam(required = false) String provider,
                                        @RequestParam(required = false) Integer isPreset,
                                        @RequestParam(required = false) String httpMethod) {
         LambdaQueryWrapper<ApiComponent> wrapper = new LambdaQueryWrapper<>();
         wrapper.and(StringUtils.hasText(query.getKeyword()), w -> w
                         .like(ApiComponent::getComponentName, query.getKeyword())
                         .or()
-                        .like(ApiComponent::getComponentCode, query.getKeyword()))
+                        .like(ApiComponent::getComponentCode, query.getKeyword())
+                        .or()
+                        .like(ApiComponent::getUrlTemplate, query.getKeyword()))
                 .eq(StringUtils.hasText(category), ApiComponent::getCategory, category)
+                .eq(StringUtils.hasText(provider), ApiComponent::getProvider, provider)
                 .eq(isPreset != null, ApiComponent::getIsPreset, isPreset)
                 .eq(StringUtils.hasText(httpMethod), ApiComponent::getHttpMethod, httpMethod)
                 .orderByDesc(ApiComponent::getUpdateTime);

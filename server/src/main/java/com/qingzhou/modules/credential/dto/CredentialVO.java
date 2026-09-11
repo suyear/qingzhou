@@ -15,6 +15,11 @@ public class CredentialVO {
     private String corpId;
     private String agentId;
     private boolean hasSecret;
+    /** MYSQL 数据源连接信息（不含密码） */
+    private String dbHost;
+    private Integer dbPort;
+    private String dbName;
+    private String dbUsername;
     private Integer status;
     private String remark;
     private LocalDateTime createTime;

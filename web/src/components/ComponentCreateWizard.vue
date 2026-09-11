@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="visible"
-    title="接入接口组件"
+    title="新建组件"
     width="760px"
     destroy-on-close
     :close-on-click-modal="false"
@@ -10,7 +10,7 @@
     @closed="reset"
     @opened="onOpened"
   >
-    <div v-if="entryMode !== 'manual'" class="entry-switch entry-switch-dual">
+    <div v-if="entryMode !== 'manual'" class="entry-switch" :class="{ 'entry-switch-dual': entryOptions.length === 2 }">
       <button
         v-for="item in entryOptions"
         :key="item.value"
@@ -200,6 +200,11 @@
       </el-form>
     </div>
 
+    <!-- 数据库脚本 -->
+    <div v-show="entryMode === 'sql'" class="wizard-body">
+      <DatabaseSqlPanel :form="dbForm" />
+    </div>
+
     <!-- 健康检查 -->
     <div v-show="entryMode === 'health'" class="wizard-body health-pane">
       <div class="health-card">
@@ -297,7 +302,7 @@
             :disabled="!canSave"
             @click="emitSave(true)"
           >
-            保存并试连通
+            {{ entryMode === 'sql' ? '保存并试运行 SQL' : '保存并试连通' }}
           </el-button>
         </div>
       </div>
@@ -310,6 +315,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import ComponentAuthPanel from '@/components/ComponentAuthPanel.vue'
 import ComponentCurlImport from '@/components/ComponentCurlImport.vue'
+import DatabaseSqlPanel from '@/components/DatabaseSqlPanel.vue'
 import { applyCurlImport, parseCurl } from '@/utils/parseCurl'
 import {
   buildExtraConfig,
@@ -317,6 +323,7 @@ import {
   validateAuthState,
 } from '@/utils/componentAuth'
 import { fieldsToSchema } from '@/utils/schema'
+import { defaultDbResponseSchema, extractNamedParams, paramsToRows } from '@/utils/sqlParams'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -328,6 +335,7 @@ const emit = defineEmits(['update:visible', 'save'])
 
 const entryOptions = [
   { value: 'easy', label: '接入接口', sub: '填地址或 curl', icon: '🔗' },
+  { value: 'sql', label: '数据库脚本', sub: '写 SQL 当接口', icon: '🗄️' },
   { value: 'health', label: '先体验一下', sub: '免配置', icon: '💚' },
 ]
 
@@ -374,6 +382,18 @@ const form = reactive({
   params: [],
 })
 
+const dbForm = reactive({
+  componentName: '',
+  componentCode: '',
+  description: '',
+  sql: '',
+  datasourceId: null,
+  accessMode: 'READ',
+  maxRows: 200,
+  timeoutMs: 10000,
+  params: [],
+})
+
 const rules = {
   urlTemplate: [
     { required: true, message: '请填写接口地址', trigger: 'blur' },
@@ -404,6 +424,10 @@ const bannerCopy = {
     title: '两种方式，任选其一',
     desc: '有 Postman curl 可粘贴快速填入；没有的话按下面步骤填写名称和地址即可。',
   },
+  sql: {
+    title: '把 SQL 变成可编排节点',
+    desc: '选择数据源，编写 :userId 这类命名参数 SQL。执行时走 PreparedStatement，避免拼接注入。',
+  },
   health: {
     title: '快速体验',
     desc: '无需配置，点下方按钮即可完成创建并试连通。',
@@ -419,6 +443,9 @@ const bannerDesc = computed(() => bannerCopy[entryMode.value]?.desc || '')
 const hasConnection = computed(() => Boolean(normalizeUrl(form.urlTemplate)))
 const canSave = computed(() => {
   if (entryMode.value === 'health') return true
+  if (entryMode.value === 'sql') {
+    return Boolean(dbForm.componentName.trim()) && Boolean(dbForm.sql.trim()) && Boolean(dbForm.datasourceId)
+  }
   if (entryMode.value === 'easy') {
     return Boolean(form.componentName.trim()) && hasConnection.value
   }
@@ -431,6 +458,9 @@ const footerHint = computed(() => {
       return '已识别 curl，请核对下方信息后保存'
     }
     return hasConnection.value ? '保存后会自动试连通' : '可粘贴 curl 导入，或填写名称和地址'
+  }
+  if (entryMode.value === 'sql') {
+    return dbForm.datasourceId ? '保存后会按当前参数试运行 SQL' : '请先选择或新建 MySQL 数据源'
   }
   return ''
 })
@@ -639,6 +669,15 @@ function reset() {
   form.retryTimes = 0
   form.description = ''
   form.params = []
+  dbForm.componentName = ''
+  dbForm.componentCode = ''
+  dbForm.description = ''
+  dbForm.sql = ''
+  dbForm.datasourceId = null
+  dbForm.accessMode = 'READ'
+  dbForm.maxRows = 200
+  dbForm.timeoutMs = 10000
+  dbForm.params = []
   authState.value = createEmptyAuthState()
   formRef.value?.clearValidate()
   easyFormRef.value?.clearValidate()
@@ -682,6 +721,42 @@ function ensureComponentName() {
   syncCode()
 }
 
+function buildDatabasePayload() {
+  if (!dbForm.componentName.trim()) {
+    throw new Error('请填写组件名称')
+  }
+  if (!dbForm.datasourceId) {
+    throw new Error('请选择 MySQL 数据源')
+  }
+  if (!dbForm.sql.trim()) {
+    throw new Error('请填写 SQL 脚本')
+  }
+  dbForm.params = paramsToRows(extractNamedParams(dbForm.sql), dbForm.params)
+  const code = (dbForm.componentCode || `custom.db.${Date.now().toString(36)}`).trim()
+  if (!/^[a-z0-9._-]+$/.test(code)) {
+    throw new Error('编码格式不正确')
+  }
+  return {
+    componentCode: code,
+    componentName: dbForm.componentName.trim(),
+    provider: 'DATABASE',
+    category: 'DATABASE',
+    httpMethod: 'QUERY',
+    urlTemplate: dbForm.sql.trim(),
+    timeoutMs: dbForm.timeoutMs,
+    retryTimes: 0,
+    description: dbForm.description,
+    bodySchema: fieldsToSchema(dbForm.params),
+    responseSchema: defaultDbResponseSchema(),
+    extraConfig: {
+      kind: 'DATABASE',
+      datasourceId: dbForm.datasourceId,
+      accessMode: dbForm.accessMode,
+      maxRows: dbForm.maxRows,
+    },
+  }
+}
+
 function buildPayload() {
   ensureComponentName()
   const cleaned = paramMode.value === 'none' ? [] : form.params.filter((item) => String(item.key || '').trim())
@@ -708,6 +783,14 @@ function buildPayload() {
 }
 
 async function emitSave(testAfter) {
+  if (entryMode.value === 'sql') {
+    try {
+      emit('save', { payload: buildDatabasePayload(), testAfter })
+    } catch (error) {
+      ElMessage.warning(error.message || '请检查填写内容')
+    }
+    return
+  }
   if (!hasConnection.value) {
     ElMessage.warning(entryMode.value === 'easy' ? '请填写接口地址' : '请先粘贴 curl 或填写接口地址')
     return

@@ -18,14 +18,13 @@ public class ComponentSaveRequest {
     /** WECOM / CUSTOM，创建时默认 CUSTOM */
     private String provider;
 
-    /** MESSAGE / ORG / GROUP / HTTP */
+    /** MESSAGE / ORG / GROUP / HTTP / DATABASE */
     private String category;
 
-    @NotBlank(message = "HTTP 方法不能为空")
+    /** HTTP 方法，或数据库组件的 QUERY / UPDATE */
     private String httpMethod;
 
-    @NotBlank(message = "URL 不能为空")
-    @Size(max = 512, message = "URL 最长 512")
+    /** HTTP URL 模板，或数据库组件的参数化 SQL */
     private String urlTemplate;
 
     /** 允许传 JSON 对象或已序列化字符串 */

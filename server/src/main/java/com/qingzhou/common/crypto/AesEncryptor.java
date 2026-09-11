@@ -18,7 +18,7 @@ import java.util.Base64;
  * 敏感字段 AES-GCM 加解密。
  *
  * 【加密存储点】当前必须走本组件写入的字段：
- * 1. qz_credential.secret_cipher     （企业微信 CorpSecret）
+ * 1. qz_credential.secret_cipher     （企业微信 CorpSecret / 自定义密钥 / MySQL 密码）
  * 2. qz_openapi_app.app_secret_cipher（OpenAPI HMAC Secret）
  *
  * 密文格式：Base64( IV[12字节] + ciphertext + tag )

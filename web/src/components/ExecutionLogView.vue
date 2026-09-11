@@ -78,7 +78,12 @@
             <div class="log-sub qz-mono">{{ item.requestMethod }} {{ item.requestUrl || '—' }}</div>
             <div v-if="item.errorMsg" class="log-error">{{ item.errorMsg }}</div>
             <div v-else class="log-meta">
-              HTTP {{ item.responseStatus ?? '—' }}
+              <template v-if="isSqlLog(item)">
+                {{ sqlResultText(item) }}
+              </template>
+              <template v-else>
+                HTTP {{ item.responseStatus ?? '—' }}
+              </template>
               <span>耗时 {{ durationText(item.durationMs) }}</span>
               <span>重试 {{ item.retryCount || 0 }}</span>
             </div>
@@ -88,18 +93,18 @@
               </button>
               <div v-show="isOpen(reqName(item, index))" class="io-panel">
                 <DetailCompare
-                  left-title="请求"
-                  right-title="响应"
+                  :left-title="isSqlLog(item) ? 'SQL / 参数' : '请求'"
+                  :right-title="isSqlLog(item) ? '结果预览' : '响应'"
                   :left-value="item.requestBody"
                   :right-value="item.responseBody"
-                  left-empty="暂无请求体"
-                  right-empty="暂无响应体"
-                  left-copy-message="已复制请求"
-                  right-copy-message="已复制响应"
+                  :left-empty="isSqlLog(item) ? '暂无 SQL' : '暂无请求体'"
+                  :right-empty="isSqlLog(item) ? '暂无结果' : '暂无响应体'"
+                  :left-copy-message="isSqlLog(item) ? '已复制 SQL' : '已复制请求'"
+                  :right-copy-message="isSqlLog(item) ? '已复制结果' : '已复制响应'"
                   max-height="220px"
                 />
                 <DetailCodeBlock
-                  v-if="item.requestHeaders"
+                  v-if="item.requestHeaders && !isSqlLog(item)"
                   class="io-headers"
                   title="请求头"
                   :value="item.requestHeaders"
@@ -126,6 +131,7 @@ import DetailCompare from '@/components/detail/DetailCompare.vue'
 import DetailCodeBlock from '@/components/detail/DetailCodeBlock.vue'
 import DetailEmpty from '@/components/detail/DetailEmpty.vue'
 import { copyText, durationText, formatTime, triggerLabel } from '@/utils/format'
+import { isSqlLog } from '@/utils/sqlParams'
 
 const props = defineProps({
   instance: { type: Object, default: null },
@@ -182,6 +188,22 @@ function reqName(item, index) {
 
 function hasIo(item) {
   return Boolean(item.requestBody || item.responseBody || item.requestHeaders)
+}
+
+function sqlResultText(item) {
+  try {
+    const body = typeof item.responseBody === 'string' ? JSON.parse(item.responseBody) : item.responseBody
+    if (body && typeof body === 'object') {
+      if (item.requestMethod === 'UPDATE' || body.affectedRows) {
+        return `影响 ${body.affectedRows ?? 0} 行`
+      }
+      const extra = body.truncated ? '（已截断）' : ''
+      return `返回 ${body.rowCount ?? 0} 行${extra}`
+    }
+  } catch {
+    // ignore
+  }
+  return 'SQL 已执行'
 }
 
 function isOpen(name) {

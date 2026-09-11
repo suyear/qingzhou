@@ -14,10 +14,14 @@ import com.qingzhou.modules.component.dto.ComponentTestVO;
 import com.qingzhou.modules.component.entity.ApiComponent;
 import com.qingzhou.modules.component.mapper.ApiComponentMapper;
 import com.qingzhou.modules.component.service.ApiComponentService;
+import com.qingzhou.modules.execution.engine.DatabaseComponentSupport;
+import com.qingzhou.modules.execution.engine.DbCallResult;
 import com.qingzhou.modules.execution.engine.HttpAuthSupport;
 import com.qingzhou.modules.execution.engine.HttpCallResult;
 import com.qingzhou.modules.execution.engine.HttpUrlSupport;
 import com.qingzhou.modules.execution.engine.NodeHttpInvoker;
+import com.qingzhou.modules.execution.engine.NodeJdbcInvoker;
+import com.qingzhou.modules.execution.engine.sql.BoundSql;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,11 +39,12 @@ public class ApiComponentServiceImpl extends ServiceImpl<ApiComponentMapper, Api
         implements ApiComponentService {
 
     private static final Set<String> HTTP_METHODS = Set.of("GET", "POST", "PUT", "DELETE", "PATCH");
-    private static final Set<String> PROVIDERS = Set.of("WECOM", "CUSTOM");
+    private static final Set<String> PROVIDERS = Set.of("WECOM", "CUSTOM", "DATABASE");
 
     private final Jsons jsons;
     private final ObjectMapper objectMapper;
     private final NodeHttpInvoker nodeHttpInvoker;
+    private final NodeJdbcInvoker nodeJdbcInvoker;
     private final TokenManager tokenManager;
 
     @Override
@@ -98,6 +103,9 @@ public class ApiComponentServiceImpl extends ServiceImpl<ApiComponentMapper, Api
         ApiComponent component = getById(id);
         if (component == null) {
             throw new BizException(ResultCode.NOT_FOUND, "接口组件不存在");
+        }
+        if (DatabaseComponentSupport.isDatabase(component)) {
+            return testDatabase(component, request);
         }
         ComponentTestRequest safe = request == null ? new ComponentTestRequest() : request;
         Map<String, Object> params = safe.getParams() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(safe.getParams());
@@ -175,6 +183,38 @@ public class ApiComponentServiceImpl extends ServiceImpl<ApiComponentMapper, Api
         return vo;
     }
 
+    private ComponentTestVO testDatabase(ApiComponent component, ComponentTestRequest request) {
+        ComponentTestRequest safe = request == null ? new ComponentTestRequest() : request;
+        Map<String, Object> params = safe.getParams() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(safe.getParams());
+        DatabaseComponentSupport.DatabaseSpec spec;
+        try {
+            spec = DatabaseComponentSupport.spec(component, jsons);
+        } catch (BizException ex) {
+            return ComponentTestVO.fail(ex.getMessage());
+        }
+        int timeout = component.getTimeoutMs() == null ? 10000 : component.getTimeoutMs();
+        long started = System.currentTimeMillis();
+        DbCallResult result = nodeJdbcInvoker.invoke(spec, params, timeout);
+        long duration = System.currentTimeMillis() - started;
+
+        ComponentTestVO vo = new ComponentTestVO();
+        vo.setRequestMethod(spec.method());
+        vo.setRequestUrl(result.displayUrl());
+        vo.setDurationMs(duration);
+        vo.setResponseBody(jsons.toJson(result.logBody() == null || result.logBody().isEmpty()
+                ? result.output() : result.logBody()));
+        vo.setHttpStatus(result.success() ? 200 : (result.timeout() ? 504 : 400));
+        vo.setSuccess(result.success());
+        if (result.timeout()) {
+            vo.setMessage("数据库语句超时");
+            return vo;
+        }
+        vo.setMessage(result.error() == null
+                ? (result.success() ? "SQL 执行成功" : "SQL 执行失败")
+                : result.error());
+        return vo;
+    }
+
     private Integer readWecomErrcode(String body) {
         Map<String, Object> json = readJsonMap(body);
         if (json == null || !json.containsKey("errcode")) {
@@ -213,16 +253,16 @@ public class ApiComponentServiceImpl extends ServiceImpl<ApiComponentMapper, Api
     }
 
     private void fill(ApiComponent entity, ComponentSaveRequest request, String code) {
-        String method = request.getHttpMethod().trim().toUpperCase(Locale.ROOT);
-        if (!HTTP_METHODS.contains(method)) {
-            throw new BizException(ResultCode.BAD_REQUEST, "不支持的 HTTP 方法: " + method);
-        }
         String provider = StringUtils.hasText(request.getProvider())
                 ? request.getProvider().trim().toUpperCase(Locale.ROOT)
                 : entity.getProvider();
         if (provider != null && !PROVIDERS.contains(provider)) {
             throw new BizException(ResultCode.BAD_REQUEST, "不支持的提供方: " + provider);
         }
+        boolean database = DatabaseComponentSupport.isDatabase(
+                provider,
+                request.getCategory(),
+                request.getHttpMethod());
 
         entity.setComponentCode(code);
         entity.setComponentName(request.getComponentName().trim());
@@ -230,6 +270,24 @@ public class ApiComponentServiceImpl extends ServiceImpl<ApiComponentMapper, Api
         if (StringUtils.hasText(request.getCategory())) {
             entity.setCategory(request.getCategory().trim().toUpperCase(Locale.ROOT));
         }
+        if (database) {
+            fillDatabase(entity, request);
+            return;
+        }
+        if (!StringUtils.hasText(request.getHttpMethod())) {
+            throw new BizException(ResultCode.BAD_REQUEST, "HTTP 方法不能为空");
+        }
+        if (!StringUtils.hasText(request.getUrlTemplate())) {
+            throw new BizException(ResultCode.BAD_REQUEST, "URL 不能为空");
+        }
+        String method = request.getHttpMethod().trim().toUpperCase(Locale.ROOT);
+        if (!HTTP_METHODS.contains(method)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "不支持的 HTTP 方法: " + method);
+        }
+        if (request.getUrlTemplate().trim().length() > 2048) {
+            throw new BizException(ResultCode.BAD_REQUEST, "URL 最长 2048");
+        }
+
         entity.setHttpMethod(method);
         entity.setUrlTemplate(request.getUrlTemplate().trim());
         entity.setHeadersSchema(jsons.toJson(request.getHeadersSchema()));
@@ -244,6 +302,106 @@ public class ApiComponentServiceImpl extends ServiceImpl<ApiComponentMapper, Api
             entity.setStatus(request.getStatus());
         }
         entity.setDescription(request.getDescription());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void fillDatabase(ApiComponent entity, ComponentSaveRequest request) {
+        if (!StringUtils.hasText(request.getUrlTemplate())) {
+            throw new BizException(ResultCode.BAD_REQUEST, "请填写 SQL 脚本");
+        }
+        if (request.getUrlTemplate().trim().length() > 20000) {
+            throw new BizException(ResultCode.BAD_REQUEST, "SQL 最长 20000 字符");
+        }
+        Map<String, Object> extra = asMap(request.getExtraConfig());
+        Object rawId = extra.get("datasourceId");
+        Long datasourceId = rawId instanceof Number number ? number.longValue() : parseLong(rawId);
+        if (datasourceId == null) {
+            throw new BizException(ResultCode.BAD_REQUEST, "请选择 MySQL 数据源");
+        }
+        String accessMode = extra.get("accessMode") == null ? "READ" : String.valueOf(extra.get("accessMode"));
+        Integer maxRows = extra.get("maxRows") instanceof Number number ? number.intValue() : null;
+        DatabaseComponentSupport.DatabaseSpec spec = DatabaseComponentSupport.spec(
+                fakeComponent(request.getUrlTemplate(), datasourceId, accessMode, maxRows), jsons);
+        BoundSql bound = spec.bound();
+        Map<String, Object> storedExtra = DatabaseComponentSupport.extraConfig(datasourceId, accessMode, maxRows);
+        entity.setProvider(DatabaseComponentSupport.PROVIDER);
+        entity.setCategory(DatabaseComponentSupport.CATEGORY);
+        entity.setHttpMethod(spec.method());
+        entity.setUrlTemplate(request.getUrlTemplate().trim());
+        entity.setHeadersSchema(null);
+        entity.setQuerySchema(null);
+        entity.setBodySchema(jsons.toJson(mergeParamSchema(request.getBodySchema(), bound)));
+        entity.setResponseSchema(jsons.toJson(
+                request.getResponseSchema() == null
+                        ? DatabaseComponentSupport.defaultResponseSchema()
+                        : request.getResponseSchema()));
+        entity.setExtraConfig(jsons.toJson(storedExtra));
+        entity.setTimeoutMs(defaultPositive(request.getTimeoutMs(), entity.getTimeoutMs(), 10000));
+        entity.setRetryTimes(defaultNonNegative(request.getRetryTimes(), entity.getRetryTimes(), 0));
+        entity.setRetryIntervalMs(defaultPositive(request.getRetryIntervalMs(), entity.getRetryIntervalMs(), 1000));
+        if (request.getStatus() != null) {
+            entity.setStatus(request.getStatus());
+        }
+        entity.setDescription(request.getDescription());
+    }
+
+    private ApiComponent fakeComponent(String sql, Long datasourceId, String accessMode, Integer maxRows) {
+        ApiComponent fake = new ApiComponent();
+        fake.setProvider(DatabaseComponentSupport.PROVIDER);
+        fake.setCategory(DatabaseComponentSupport.CATEGORY);
+        fake.setUrlTemplate(sql);
+        fake.setExtraConfig(jsons.toJson(DatabaseComponentSupport.extraConfig(datasourceId, accessMode, maxRows)));
+        return fake;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mergeParamSchema(Object incoming, BoundSql bound) {
+        Map<String, Object> generated = DatabaseComponentSupport.paramsToSchema(bound);
+        if (incoming == null) {
+            return generated;
+        }
+        Map<String, Object> incomingMap = asMap(incoming);
+        Map<String, Object> incomingProps = incomingMap.get("properties") instanceof Map<?, ?> map
+                ? (Map<String, Object>) map : Map.of();
+        Map<String, Object> properties = (Map<String, Object>) generated.get("properties");
+        for (String name : bound.paramNames()) {
+            if (incomingProps.get(name) instanceof Map<?, ?> keep) {
+                properties.put(name, keep);
+            }
+        }
+        Object required = incomingMap.get("required");
+        if (required instanceof java.util.Collection<?> collection) {
+            generated.put("required", collection);
+        }
+        return generated;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asMap(Object raw) {
+        if (raw == null) {
+            return new LinkedHashMap<>();
+        }
+        if (raw instanceof Map<?, ?> map) {
+            return new LinkedHashMap<>((Map<String, Object>) map);
+        }
+        if (raw instanceof String text && StringUtils.hasText(text)) {
+            Object parsed = jsons.toObject(text);
+            if (parsed instanceof Map<?, ?> map) {
+                return new LinkedHashMap<>((Map<String, Object>) map);
+            }
+        }
+        return new LinkedHashMap<>();
+    }
+
+    private static Long parseLong(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(raw));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private void assertCodeUnique(String code, Long excludeId) {
