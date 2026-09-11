@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="凭证管理" desc="给工作流调用外部接口时使用。企业微信填 CorpId + Secret 换 Token；自定义 HTTP 只存密钥/口令，不走企微。">
+    <PageHeader title="凭证管理" desc="企业微信换 Token；自定义 HTTP 存密钥；MySQL 数据源给数据库组件用（密码加密存储）。">
       <el-input
         v-model="keyword"
         class="search-input"
@@ -18,6 +18,7 @@
       <div class="cred-guide">
         <span><strong>企业微信</strong>：需要 CorpId、Secret，可点「测连通」确认能拿到 AccessToken。</span>
         <span><strong>自定义 HTTP</strong>：普通接口的 Token / 密码，保存即可，组件鉴权时引用；不能用企微测连通。</span>
+        <span><strong>MySQL 数据源</strong>：主机/端口/库名/账号/密码，给数据库脚本组件使用；可测连通。</span>
       </div>
     </el-alert>
     <div class="qz-panel">
@@ -25,7 +26,7 @@
       <el-table-column prop="credentialName" label="名称" min-width="150" />
       <el-table-column label="类型" width="110">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.credentialType === 'WECOM' ? 'success' : 'info'">
+          <el-tag size="small" :type="typeTag(row.credentialType)">
             {{ credentialTypeLabel(row.credentialType) }}
           </el-tag>
         </template>
@@ -36,8 +37,12 @@
           <span v-else>全局共享</span>
         </template>
       </el-table-column>
-      <el-table-column label="CorpId" min-width="160" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.credentialType === 'WECOM' ? (row.corpId || '—') : '—' }}</template>
+      <el-table-column label="连接信息" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span v-if="row.credentialType === 'MYSQL'" class="mono">{{ mysqlTarget(row) }}</span>
+          <span v-else-if="row.credentialType === 'WECOM'">{{ row.corpId || '—' }}</span>
+          <span v-else>—</span>
+        </template>
       </el-table-column>
       <el-table-column label="AgentId" width="110">
         <template #default="{ row }">{{ row.credentialType === 'WECOM' ? (row.agentId || '—') : '—' }}</template>
@@ -103,11 +108,10 @@
           <el-select v-model="form.credentialType" style="width: 100%">
             <el-option label="企业微信" value="WECOM" />
             <el-option label="自定义 HTTP" value="CUSTOM" />
+            <el-option label="MySQL 数据源" value="MYSQL" />
           </el-select>
           <p class="form-hint">
-            {{ form.credentialType === 'WECOM'
-              ? '用于企业微信接口，保存后可测连通。'
-              : '用于普通 HTTP 接口的 Token / 密码，不会去企业微信换票。' }}
+            {{ typeHint }}
           </p>
         </el-form-item>
         <el-form-item label="作用域">
@@ -132,12 +136,26 @@
         <el-form-item v-if="form.credentialType === 'WECOM'" label="AgentId">
           <el-input v-model="form.agentId" />
         </el-form-item>
+        <template v-if="form.credentialType === 'MYSQL'">
+          <el-form-item label="主机" required>
+            <el-input v-model="form.dbHost" placeholder="127.0.0.1" />
+          </el-form-item>
+          <el-form-item label="端口">
+            <el-input-number v-model="form.dbPort" :min="1" :max="65535" />
+          </el-form-item>
+          <el-form-item label="数据库" required>
+            <el-input v-model="form.dbName" placeholder="demo" />
+          </el-form-item>
+          <el-form-item label="用户名" required>
+            <el-input v-model="form.dbUsername" placeholder="qingzhou" />
+          </el-form-item>
+        </template>
         <el-form-item :label="secretLabel" :required="!form.id">
           <el-input
             v-model="form.secret"
             type="password"
             show-password
-            :placeholder="form.credentialType === 'WECOM' ? 'CorpSecret，明文只在保存时提交' : 'Token 或密码，明文只在保存时提交'"
+            :placeholder="secretPlaceholder"
           />
         </el-form-item>
         <el-form-item label="备注">
@@ -211,18 +229,40 @@ function workflowTitle(id) {
 
 function credentialTypeLabel(type) {
   if (type === 'CUSTOM') return '自定义 HTTP'
+  if (type === 'MYSQL') return 'MySQL'
   return '企业微信'
 }
 
+function typeTag(type) {
+  if (type === 'WECOM') return 'success'
+  if (type === 'MYSQL') return 'warning'
+  return 'info'
+}
+
+function mysqlTarget(row) {
+  if (!row?.dbHost) return '—'
+  return `${row.dbHost}:${row.dbPort || 3306}/${row.dbName || ''}`
+}
+
 const secretLabel = computed(() => {
-  const base = form.credentialType === 'CUSTOM' ? '密钥 / Token' : 'Secret'
+  const base = form.credentialType === 'CUSTOM' ? '密钥 / Token' : (form.credentialType === 'MYSQL' ? '密码' : 'Secret')
   return form.id ? `${base}（留空不改）` : base
+})
+const secretPlaceholder = computed(() => {
+  if (form.credentialType === 'WECOM') return 'CorpSecret，明文只在保存时提交'
+  if (form.credentialType === 'MYSQL') return '数据库密码，明文只在保存时提交，加密存储'
+  return 'Token 或密码，明文只在保存时提交'
+})
+const typeHint = computed(() => {
+  if (form.credentialType === 'WECOM') return '用于企业微信接口，保存后可测连通。'
+  if (form.credentialType === 'MYSQL') return '用于数据库脚本组件。密码加密存储，可测连通。'
+  return '用于普通 HTTP 接口的 Token / 密码，不会去企业微信换票。'
 })
 
 const emptyText = computed(() => (
   keyword.value
     ? '没有匹配的凭证'
-    : '还没有凭证。企微填 CorpId+Secret；自定义 HTTP 只存密钥即可。'
+    : '还没有凭证。企微填 CorpId+Secret；自定义 HTTP 只存密钥；MySQL 填主机和密码。'
 ))
 const dialogVisible = ref(false)
 const saving = ref(false)
@@ -236,6 +276,10 @@ const form = reactive({
   agentId: '',
   secret: '',
   remark: '',
+  dbHost: '127.0.0.1',
+  dbPort: 3306,
+  dbName: '',
+  dbUsername: '',
 })
 
 async function load() {
@@ -268,6 +312,10 @@ function resetForm() {
   form.agentId = ''
   form.secret = ''
   form.remark = ''
+  form.dbHost = '127.0.0.1'
+  form.dbPort = 3306
+  form.dbName = ''
+  form.dbUsername = ''
 }
 
 function openCreate() {
@@ -285,6 +333,10 @@ function openEdit(row) {
   form.agentId = row.agentId || ''
   form.secret = ''
   form.remark = row.remark || ''
+  form.dbHost = row.dbHost || '127.0.0.1'
+  form.dbPort = row.dbPort || 3306
+  form.dbName = row.dbName || ''
+  form.dbUsername = row.dbUsername || ''
   dialogVisible.value = true
 }
 
@@ -297,8 +349,12 @@ async function save() {
     ElMessage.warning('请填写 CorpId')
     return
   }
+  if (form.credentialType === 'MYSQL' && (!form.dbHost || !form.dbName || !form.dbUsername)) {
+    ElMessage.warning('请填写数据库主机、库名和用户名')
+    return
+  }
   if (!form.id && !form.secret) {
-    ElMessage.warning('请填写 Secret')
+    ElMessage.warning(form.credentialType === 'MYSQL' ? '请填写数据库密码' : '请填写 Secret')
     return
   }
   if (form.scope === 'WORKFLOW' && !form.workflowId) {
@@ -316,6 +372,10 @@ async function save() {
       agentId: form.agentId,
       secret: form.secret || undefined,
       remark: form.remark,
+      dbHost: form.credentialType === 'MYSQL' ? form.dbHost : undefined,
+      dbPort: form.credentialType === 'MYSQL' ? form.dbPort : undefined,
+      dbName: form.credentialType === 'MYSQL' ? form.dbName : undefined,
+      dbUsername: form.credentialType === 'MYSQL' ? form.dbUsername : undefined,
     }
     if (form.id) {
       await updateCredential(form.id, payload)
@@ -391,5 +451,6 @@ onMounted(async () => {
   color: var(--qz-text-muted);
   line-height: 1.45;
 }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 </style>
 

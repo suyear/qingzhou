@@ -98,6 +98,8 @@ const methodClass = computed(() => `m-${(data.value.httpMethod || 'GET').toLower
 .m-put { background: #d97706; }
 .m-patch { background: #7c3aed; }
 .m-delete { background: #dc2626; }
+.m-query { background: #0d9488; }
+.m-update { background: #d97706; }
 .path {
   font-size: 12px;
   color: #475569;

@@ -3,6 +3,7 @@ import { parseJson } from './schema.js'
 const META_KEYS = new Set([
   'componentId', 'componentCode', 'componentName', 'httpMethod',
   'urlTemplate', 'urlPath', 'timeoutMs', 'retryTimes', 'retryIntervalMs', 'requiredParams',
+  'provider', 'category', 'sqlPreview',
 ])
 
 const UPSTREAM_PRESETS = ['errcode', 'errmsg', 'chatid', 'userid', 'id', 'msgid', 'access_token', 'data']

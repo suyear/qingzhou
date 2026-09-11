@@ -16,7 +16,8 @@ public final class HttpUrlSupport {
 
     public static final Set<String> META_KEYS = Set.of(
             "componentId", "componentCode", "componentName", "httpMethod",
-            "urlTemplate", "urlPath", "timeoutMs", "retryTimes", "retryIntervalMs", "requiredParams"
+            "urlTemplate", "urlPath", "timeoutMs", "retryTimes", "retryIntervalMs", "requiredParams",
+            "provider", "category", "sqlPreview"
     );
 
     private static final Pattern PLACEHOLDER = Pattern.compile("\\$\\{([^}]+)}");

@@ -52,7 +52,7 @@
       show-icon
       :closable="false"
       title="还没有接口组件"
-      description="建议先接入一个 HTTP 接口（或体验预置企微组件），再去设计器拖成工作流。"
+      description="建议先接入一个 HTTP 接口、数据库脚本，或体验预置企微组件，再去设计器拖成工作流。"
     >
       <el-button type="primary" size="small" @click="$router.push('/components')">去接入</el-button>
     </el-alert>

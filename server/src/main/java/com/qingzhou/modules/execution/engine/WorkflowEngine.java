@@ -10,6 +10,7 @@ import com.qingzhou.infra.wecom.TokenManager;
 import com.qingzhou.modules.component.entity.ApiComponent;
 import com.qingzhou.modules.component.service.ApiComponentService;
 import com.qingzhou.modules.execution.dto.ExecutionVO;
+import com.qingzhou.modules.execution.engine.sql.SqlParamBinder;
 import com.qingzhou.modules.execution.entity.ExecutionInstance;
 import com.qingzhou.modules.execution.entity.ExecutionNodeLog;
 import com.qingzhou.modules.execution.service.ExecutionInstanceService;
@@ -58,6 +59,7 @@ public class WorkflowEngine {
     private final ExecutionInstanceService executionInstanceService;
     private final ExecutionNodeLogService executionNodeLogService;
     private final NodeHttpInvoker nodeHttpInvoker;
+    private final NodeJdbcInvoker nodeJdbcInvoker;
     private final TokenManager tokenManager;
     private final Jsons jsons;
     private final ObjectMapper objectMapper;
@@ -189,6 +191,79 @@ public class WorkflowEngine {
         nodeLog.setStatus("RUNNING");
         nodeLog.setStartTime(LocalDateTime.now());
         executionNodeLogService.save(nodeLog);
+        if (DatabaseComponentSupport.isDatabase(component)) {
+            return executeDatabaseNode(nodeLog, component, payload);
+        }
+        return executeHttpNode(nodeLog, workflow, component, payload);
+    }
+
+    private Object executeDatabaseNode(ExecutionNodeLog nodeLog, ApiComponent component, Map<String, Object> payload) {
+        DatabaseComponentSupport.DatabaseSpec spec;
+        try {
+            spec = DatabaseComponentSupport.spec(component, jsons);
+        } catch (BizException ex) {
+            failLog(nodeLog, "FAILED", ex.getMessage());
+            throw ex;
+        }
+        nodeLog.setRequestMethod(spec.method());
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("sql", spec.sql());
+        request.put("params", SqlParamBinder.summary(spec.bound(), payload));
+        request.put("accessMode", spec.accessMode());
+        nodeLog.setRequestBody(jsons.toJson(request));
+        nodeLog.setRequestHeaders(jsons.toJson(Map.of("datasourceId", spec.datasourceId(), "maxRows", spec.maxRows())));
+        executionNodeLogService.updateById(nodeLog);
+
+        int timeout = component.getTimeoutMs() == null ? 10000 : component.getTimeoutMs();
+        int retryTimes = component.getRetryTimes() == null ? 0 : component.getRetryTimes();
+        if ("UPDATE".equals(spec.method())) {
+            retryTimes = 0;
+        }
+        DbCallResult last = null;
+        int attempted = 0;
+        for (int i = 0; i <= retryTimes; i++) {
+            attempted = i;
+            last = nodeJdbcInvoker.invoke(spec, payload, timeout);
+            if (last.success()) {
+                break;
+            }
+            boolean retryable = last.timeout();
+            if (!retryable || i == retryTimes) {
+                break;
+            }
+            try {
+                Thread.sleep(component.getRetryIntervalMs() == null ? 1000 : component.getRetryIntervalMs());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        nodeLog.setEndTime(LocalDateTime.now());
+        nodeLog.setDurationMs(java.time.Duration.between(nodeLog.getStartTime(), nodeLog.getEndTime()).toMillis());
+        nodeLog.setRetryCount(attempted);
+        if (last != null) {
+            nodeLog.setRequestUrl(last.displayUrl());
+            nodeLog.setResponseStatus(last.success() ? 200 : (last.timeout() ? 504 : 400));
+            nodeLog.setResponseBody(jsons.toJson(last.logBody() == null || last.logBody().isEmpty()
+                    ? last.output() : last.logBody()));
+        }
+        if (last != null && last.success()) {
+            nodeLog.setStatus("SUCCESS");
+            executionNodeLogService.updateById(nodeLog);
+            return last.output() == null ? Map.of() : last.output();
+        }
+        nodeLog.setStatus(last != null && last.timeout() ? "TIMEOUT" : "FAILED");
+        nodeLog.setErrorMsg(last == null ? "无响应" : last.error());
+        executionNodeLogService.updateById(nodeLog);
+        throw new BizException(ResultCode.THIRD_PARTY_ERROR,
+                "节点 " + nodeLog.getNodeName() + " 失败: " + nodeLog.getErrorMsg());
+    }
+
+    private Object executeHttpNode(
+            ExecutionNodeLog nodeLog,
+            Workflow workflow,
+            ApiComponent component,
+            Map<String, Object> payload) {
 
         String token;
         try {

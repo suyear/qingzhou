@@ -271,7 +271,7 @@ const selectedFields = computed(() => {
 const componentOptions = computed(() =>
   components.value.map((item) => ({
     ...item,
-    urlPath: urlPath(item.urlTemplate),
+    urlPath: urlPath(item.urlTemplate, item),
   })),
 )
 const chainNodes = computed(() => {
@@ -288,7 +288,7 @@ const chainNodes = computed(() => {
       id: node.id,
       name: data.componentName || node.id,
       method: data.httpMethod || 'GET',
-      path: data.urlPath || urlPath(data.urlTemplate),
+      path: data.urlPath || urlPath(data.urlTemplate, data),
       configured: isNodeConfigured(bindings, fields),
       fieldCount: requiredCount,
       summaryLines: stepConfigSummary(bindings, fields, upstreamName),
@@ -995,7 +995,7 @@ async function bootstrap() {
     pageCredentials({ current: 1, size: 100 }),
   ])
   components.value = list.data?.records || []
-  credentials.value = (creds.data?.records || []).filter((item) => item.status === 1)
+  credentials.value = (creds.data?.records || []).filter((item) => item.status === 1 && item.credentialType !== 'MYSQL')
   await nextTick()
   createGraph()
   resizeGraphCanvas()

@@ -123,7 +123,7 @@
           </nav>
 
           <section v-show="leftTab === 'add'" ref="quickAddRef" class="quick-add">
-            <p class="quick-hint">从组件库挑选接口，添加到调用链末尾</p>
+            <p class="quick-hint">从组件库挑选 HTTP 接口或数据库脚本，添加到调用链末尾</p>
             <el-input
               v-model="pickerKeyword"
               size="default"
