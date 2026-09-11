@@ -1,0 +1,169 @@
+import { fieldLabel } from './workflowBinding'
+import { parseJson } from './schema'
+
+export function emptyKvRow() {
+  return { key: '', value: '' }
+}
+
+export function objectToKvRows(obj) {
+  const entries = Object.entries(obj || {})
+  if (!entries.length) {
+    return [emptyKvRow()]
+  }
+  return entries.map(([key, value]) => ({
+    key,
+    value: formatKvValue(value),
+  }))
+}
+
+export function kvRowsToObject(rows) {
+  const result = {}
+  for (const row of rows || []) {
+    const key = String(row.key || '').trim()
+    if (!key) continue
+    const raw = row.value
+    if (raw === '' || raw == null) continue
+    result[key] = coerceScalar(raw)
+  }
+  return result
+}
+
+export function formatKvValue(value) {
+  if (value == null) return ''
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
+
+export function coerceFieldValue(field, raw) {
+  if (raw === '' || raw == null) {
+    return undefined
+  }
+  const type = field?.type || 'string'
+  if (type === 'boolean') {
+    if (raw === true || raw === false) return raw
+    const text = String(raw).toLowerCase()
+    if (text === 'true' || text === '1' || text === '是') return true
+    if (text === 'false' || text === '0' || text === '否') return false
+    return undefined
+  }
+  if (type === 'integer') {
+    const num = Number.parseInt(String(raw), 10)
+    return Number.isNaN(num) ? undefined : num
+  }
+  if (type === 'number') {
+    const num = Number(raw)
+    return Number.isNaN(num) ? undefined : num
+  }
+  if (type === 'array') {
+    if (Array.isArray(raw)) return raw
+    return String(raw)
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  if (type === 'object') {
+    if (typeof raw === 'object') return raw
+    return parseJson(String(raw), null)
+  }
+  return String(raw)
+}
+
+export function coerceScalar(raw) {
+  const text = String(raw).trim()
+  if (text === 'true') return true
+  if (text === 'false') return false
+  if (/^-?\d+$/.test(text)) return Number.parseInt(text, 10)
+  if (/^-?\d+\.\d+$/.test(text)) return Number(text)
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return text
+    }
+  }
+  return text
+}
+
+export function formValuesToObject(fields, values) {
+  const result = {}
+  for (const field of fields || []) {
+    const value = coerceFieldValue(field, values[field.key])
+    if (value !== undefined) {
+      result[field.key] = value
+    }
+  }
+  return result
+}
+
+export function objectToFormValues(fields, obj) {
+  const parsed = obj && typeof obj === 'object' ? obj : {}
+  const values = {}
+  for (const field of fields || []) {
+    const raw = parsed[field.key]
+    if (raw == null) {
+      values[field.key] = field.default != null ? field.default : ''
+      continue
+    }
+    if (field.type === 'boolean') {
+      values[field.key] = raw
+    } else if (field.type === 'array' && Array.isArray(raw)) {
+      values[field.key] = raw.join(', ')
+    } else if (field.type === 'object' && typeof raw === 'object') {
+      values[field.key] = JSON.stringify(raw, null, 2)
+    } else {
+      values[field.key] = raw
+    }
+  }
+  return values
+}
+
+export function buildTriggerPayload({ fields, formValues, kvRows, jsonText, advanced }) {
+  if (advanced) {
+    const text = String(jsonText || '').trim()
+    if (!text) return undefined
+    const parsed = parseJson(text, null)
+    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { error: 'JSON 格式不正确，需为对象，例如 {"name":"张三"}' }
+    }
+    if (!Object.keys(parsed).length) return undefined
+    return { value: parsed }
+  }
+  if (fields?.length) {
+    const value = formValuesToObject(fields, formValues)
+    return Object.keys(value).length ? { value } : undefined
+  }
+  const value = kvRowsToObject(kvRows)
+  return Object.keys(value).length ? { value } : undefined
+}
+
+export function validateTriggerPayload({ fields, formValues, kvRows, jsonText, advanced }) {
+  const built = buildTriggerPayload({ fields, formValues, kvRows, jsonText, advanced })
+  if (built?.error) {
+    return built.error
+  }
+  if (!fields?.length || advanced) {
+    return ''
+  }
+  for (const field of fields) {
+    if (!field.required) continue
+    const value = formValues[field.key]
+    if (value === '' || value == null) {
+      return `请填写「${fieldLabel(field)}」`
+    }
+  }
+  return ''
+}
+
+export function formatTriggerPreview(value) {
+  if (!value || typeof value !== 'object' || !Object.keys(value).length) {
+    return '{\n  \n}'
+  }
+  return JSON.stringify(value, null, 2)
+}
+
+export function previewKeyCount(value) {
+  if (!value || typeof value !== 'object') return 0
+  return Object.keys(value).length
+}

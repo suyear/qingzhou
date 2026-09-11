@@ -1,0 +1,32 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.*
+application-local.yml
+application-local.yaml
+
+# Logs
+*.log
+logs/
+
+# Node (Phase 4)
+node_modules/
+dist/
+.vite/

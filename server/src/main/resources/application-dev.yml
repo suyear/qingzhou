@@ -1,0 +1,4 @@
+logging:
+  level:
+    com.qingzhou: DEBUG
+    com.qingzhou.modules: DEBUG

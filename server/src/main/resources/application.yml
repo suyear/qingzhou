@@ -1,0 +1,91 @@
+server:
+  port: ${SERVER_PORT:18080}
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: qingzhou-server
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+    default-property-inclusion: non_null
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:47.109.51.205}:${DB_PORT:3306}/${DB_NAME:qingzhou}?useUnicode=true&characterEncoding=utf8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:Qaz520520.}
+    hikari:
+      pool-name: QingzhouHikari
+      minimum-idle: 2
+      maximum-pool-size: 10
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-timeout: 10000
+      connection-test-query: SELECT 1
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
+      database: ${REDIS_DB:0}
+      timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# 敏感字段 AES-GCM 密钥，生产请用环境变量覆盖。长度必须 16/24/32 字节。
+qingzhou:
+  crypto:
+    aes-key: "${AES_KEY:qingzhou-aes256-secret-key-00001}"
+  openapi:
+    timestamp-tolerance-ms: 300000
+    nonce-ttl-seconds: 600
+  wecom:
+    token-url: https://qyapi.weixin.qq.com/cgi-bin/gettoken
+    token-expire-skew-seconds: 300
+    lock-ttl-seconds: 10
+    lock-retry: 8
+    lock-wait-ms: 200
+    fetch-retry: 2
+  xxl:
+    # 配置 Admin 后走 XXL-JOB 调度；留空则用内置 Cron 触发同一套 Handler
+    admin-addresses: ${XXL_JOB_ADMIN:}
+    access-token: ${XXL_JOB_TOKEN:}
+    executor:
+      appname: qingzhou-executor
+      port: 9999
+      log-path: ${user.home}/logs/qingzhou/xxl-job
+      log-retention-days: 7
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.qingzhou: INFO
+    com.qingzhou.modules: DEBUG
+    com.baomidou.mybatisplus: WARN
