@@ -153,6 +153,7 @@ import {
   objectToFormValues,
   objectToKvRows,
   previewKeyCount,
+  validateTriggerPayload,
 } from '@/utils/triggerInput'
 
 const props = defineProps({
@@ -170,21 +171,28 @@ const kvRows = ref([emptyKvRow()])
 
 const fields = computed(() => schemaToFields(props.inputSchema))
 
-const previewObject = computed(() => {
-  const built = buildTriggerPayload({
+function currentBuild() {
+  return buildTriggerPayload({
     fields: fields.value,
     formValues,
     kvRows: kvRows.value,
     jsonText: jsonText.value,
     advanced: advanced.value,
   })
-  if (built?.error) {
-    jsonError.value = built.error
-    return {}
-  }
-  jsonError.value = ''
-  return built?.value || {}
+}
+
+const previewObject = computed(() => {
+  const built = currentBuild()
+  return built?.error ? {} : (built?.value || {})
 })
+
+watch(
+  () => currentBuild(),
+  (built) => {
+    jsonError.value = built?.error || ''
+  },
+  { immediate: true },
+)
 
 const previewText = computed(() => formatTriggerPreview(previewObject.value))
 const previewCount = computed(() => previewKeyCount(previewObject.value))
@@ -269,32 +277,66 @@ function hydrateFromObject(source) {
   jsonError.value = ''
 }
 
+let lastEmitted = null
+let hydrating = false
+
+function serializePayload(value) {
+  const parsed = parseJson(value, null)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Object.keys(parsed).length) {
+    return ''
+  }
+  return JSON.stringify(parsed)
+}
+
 watch(
   previewObject,
   (value) => {
-    emit('update:modelValue', Object.keys(value).length ? value : null)
+    if (hydrating) return
+    lastEmitted = serializePayload(value)
+    emit('update:modelValue', lastEmitted ? { ...value } : null)
   },
   { deep: true },
 )
 
+function applyExternalValue(source) {
+  hydrating = true
+  hydrateFromObject(source)
+  lastEmitted = serializePayload(previewObject.value)
+  hydrating = false
+}
+
 watch(
-  () => [props.inputSchema, props.modelValue],
+  () => props.inputSchema,
   () => {
-    hydrateFromObject(props.modelValue)
+    applyExternalValue(props.modelValue)
+  },
+)
+
+watch(
+  () => props.modelValue,
+  (val) => {
+    const incoming = serializePayload(val)
+    if (incoming === lastEmitted) return
+    if (incoming === serializePayload(previewObject.value)) return
+    applyExternalValue(val)
   },
   { immediate: true },
 )
 
 defineExpose({
   validate() {
-    const built = buildTriggerPayload({
+    return validateTriggerPayload({
       fields: fields.value,
       formValues,
       kvRows: kvRows.value,
       jsonText: jsonText.value,
       advanced: advanced.value,
     })
-    return built?.error || ''
+  },
+  getPayload() {
+    const built = currentBuild()
+    if (built?.error) return undefined
+    return built?.value
   },
 })
 </script>

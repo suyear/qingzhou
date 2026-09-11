@@ -93,9 +93,8 @@
     <el-dialog
       v-model="dialogVisible"
       :title="form.id ? '编辑调度任务' : '新建调度任务'"
-      width="760px"
+      width="920px"
       destroy-on-close
-      @opened="onDialogOpened"
     >
       <el-form :model="form" label-width="96px">
         <el-form-item label="工作流" required>
@@ -151,8 +150,7 @@ import ScheduleRuleEditor from '@/components/schedule/ScheduleRuleEditor.vue'
 import ScheduleTriggerInput from '@/components/schedule/ScheduleTriggerInput.vue'
 import { askConfirm } from '@/utils/confirm'
 import { formatTime } from '@/utils/format'
-import { parseJson } from '@/utils/schema'
-import { validateTriggerPayload } from '@/utils/triggerInput'
+import { normalizeTriggerInput } from '@/utils/triggerInput'
 import {
   defaultScheduleForm,
   formToPayload,
@@ -247,18 +245,7 @@ function workflowCode(id) {
 }
 
 function resetTriggerInput(row) {
-  Object.keys(triggerInput).forEach((key) => delete triggerInput[key])
-  triggerInputJson.value = ''
-  const parsed = parseJson(row?.triggerInput, {})
-  if (inputFields.value.length) {
-    for (const field of inputFields.value) {
-      triggerInput[field.key] = parsed[field.key] ?? ''
-    }
-  } else if (row?.triggerInput) {
-    triggerInputJson.value = typeof row.triggerInput === 'string'
-      ? row.triggerInput
-      : JSON.stringify(row.triggerInput, null, 2)
-  }
+  triggerInputData.value = normalizeTriggerInput(row?.triggerInput)
 }
 
 function resetForm() {
@@ -294,30 +281,22 @@ function onWorkflowChange() {
   resetTriggerInput(null)
 }
 
-function onDialogOpened() {
-  // 打开弹窗后由 ScheduleRuleEditor 自行预览
-}
-
 function buildTriggerInputPayload() {
-  if (inputFields.value.length) {
-    const payload = {}
-    for (const field of inputFields.value) {
-      const value = triggerInput[field.key]
-      if (value !== '' && value != null) {
-        payload[field.key] = value
-      }
-    }
-    return Object.keys(payload).length ? payload : undefined
+  const fromComponent = triggerInputRef.value?.getPayload?.()
+  if (fromComponent && typeof fromComponent === 'object' && Object.keys(fromComponent).length) {
+    return fromComponent
   }
-  if (!triggerInputJson.value.trim()) {
-    return undefined
-  }
-  return parseJson(triggerInputJson.value, null)
+  return normalizeTriggerInput(triggerInputData.value) || undefined
 }
 
 async function save() {
   if (!form.workflowId) {
     ElMessage.warning('请选择工作流')
+    return
+  }
+  const inputError = triggerInputRef.value?.validate?.()
+  if (inputError) {
+    ElMessage.warning(inputError)
     return
   }
   const rulePayload = formToPayload(ruleForm.value)
@@ -433,24 +412,6 @@ onMounted(async () => {
   color: var(--el-text-color-regular);
 }
 .sub {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-.trigger-inputs {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-}
-.trigger-field label {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 12px;
-  color: var(--el-text-color-regular);
-}
-.req { color: var(--el-color-danger); }
-.hint {
-  margin: 6px 0 0;
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }

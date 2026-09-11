@@ -42,7 +42,7 @@ export function schemaToFields(schema) {
       key,
       type: spec.type || 'string',
       required: required.has(key),
-      description: spec.description || '',
+      description: spec.description || spec.title || '',
       enums: Array.isArray(spec.enum) ? spec.enum : [],
       default: spec.default,
     }

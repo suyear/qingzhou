@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:unit": "node src/utils/triggerInput.test.js"
   },
   "dependencies": {
     "@antv/x6": "^2.19.2",
