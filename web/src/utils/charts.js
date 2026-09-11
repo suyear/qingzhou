@@ -136,6 +136,67 @@ export function barOption(items = [], colorMap = {}, valueKey = 'count') {
   }
 }
 
+export function failRateOption(points = []) {
+  const dates = points.map((item) => String(item.date || '').slice(5))
+  return {
+    color: [CHART_COLORS.danger],
+    tooltip: {
+      trigger: 'axis',
+      valueFormatter: (value) => (value == null ? '—' : `${value}%`),
+    },
+    grid: { left: 8, right: 8, top: 16, bottom: 4, containLabel: true },
+    xAxis: { type: 'category', data: dates, ...AXIS, boundaryGap: false },
+    yAxis: { type: 'value', min: 0, max: 100, axisLabel: { ...AXIS.axisLabel, formatter: '{value}%' }, ...AXIS },
+    series: [
+      {
+        name: '失败率',
+        type: 'line',
+        smooth: true,
+        showSymbol: points.length <= 14,
+        connectNulls: true,
+        data: points.map((item) => (item.failRate == null ? null : item.failRate)),
+        areaStyle: { color: 'rgba(220, 38, 38, 0.08)' },
+        lineStyle: { width: 2 },
+      },
+    ],
+  }
+}
+
+export function failRankBarOption(items = []) {
+  const rows = [...items].reverse()
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: 8, right: 28, top: 8, bottom: 4, containLabel: true },
+    xAxis: { type: 'value', minInterval: 1, ...AXIS },
+    yAxis: {
+      type: 'category',
+      data: rows.map((item) => item.name || item.code || '—'),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: '#334155', fontSize: 12, width: 120, overflow: 'truncate' },
+    },
+    series: [
+      {
+        name: '失败次数',
+        type: 'bar',
+        barMaxWidth: 16,
+        itemStyle: { borderRadius: [0, 6, 6, 0], color: CHART_COLORS.danger },
+        data: rows.map((item) => item.failedCount || 0),
+      },
+    ],
+  }
+}
+
+export function jobHealthOption(health = {}) {
+  return sharePieOption(
+    [
+      { name: 'RUNNING', label: '运行中', count: health.running || 0 },
+      { name: 'STOPPED', label: '已停止', count: health.stopped || 0 },
+    ],
+    { RUNNING: CHART_COLORS.success, STOPPED: CHART_COLORS.muted },
+  )
+}
+
 export function rankBarOption(items = []) {
   const rows = [...items].reverse()
   return {

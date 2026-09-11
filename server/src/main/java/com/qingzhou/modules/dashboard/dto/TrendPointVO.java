@@ -11,4 +11,6 @@ public class TrendPointVO {
     private long successCount;
     private long failedCount;
     private long runningCount;
+    /** 当日已结束执行的失败率 0-100；无已结束数据时为 null */
+    private Double failRate;
 }

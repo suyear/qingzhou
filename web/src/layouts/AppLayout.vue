@@ -40,6 +40,10 @@
             <el-icon><List /></el-icon>
             <span>运行记录</span>
           </el-menu-item>
+          <el-menu-item index="/problems">
+            <el-icon><WarningFilled /></el-icon>
+            <span>问题定位</span>
+          </el-menu-item>
           <div class="nav-group">开放</div>
           <el-menu-item index="/openapi">
             <el-icon><Connection /></el-icon>
@@ -66,7 +70,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Connection, Grid, HomeFilled, Key, List, Share, Timer } from '@element-plus/icons-vue'
+import { Connection, Grid, HomeFilled, Key, List, Share, Timer, WarningFilled } from '@element-plus/icons-vue'
 import { backendUnreachable } from '@/api/http'
 
 const TITLES = {
@@ -76,6 +80,7 @@ const TITLES = {
   '/schedules': '定时调度',
   '/credentials': '凭证管理',
   '/executions': '运行记录',
+  '/problems': '问题定位',
   '/openapi': '开放平台',
 }
 

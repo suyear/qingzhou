@@ -174,6 +174,7 @@
         <DetailSection v-if="!detailQueryFields.length && !detailBodyFields.length" title="入参 Schema">
           <DetailEmpty text="未声明入参 Schema" />
         </DetailSection>
+        <LineagePanel v-if="detailRow.id" type="component" :id="detailRow.id" />
         <DetailActions>
           <el-button type="primary" @click="openTest(detailRow)">试连通</el-button>
           <el-button @click="openEdit(detailRow)">编辑</el-button>
@@ -368,6 +369,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
+import LineagePanel from '@/components/LineagePanel.vue'
 import ComponentAuthPanel from '@/components/ComponentAuthPanel.vue'
 import ComponentCreateWizard from '@/components/ComponentCreateWizard.vue'
 import ComponentCurlImport from '@/components/ComponentCurlImport.vue'
@@ -899,7 +901,7 @@ onMounted(() => {
 
 <style scoped>
 .sub { color: var(--qz-text-muted); font-size: 12px; margin-top: 4px; }
-.muted { color: #94a3b8; }
+.muted { color: var(--qz-text-muted); }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .name-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .guide-alert { margin-bottom: 14px; }

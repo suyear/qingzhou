@@ -77,6 +77,7 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="records">查看记录</el-dropdown-item>
+                    <el-dropdown-item command="problems">失败链路</el-dropdown-item>
                     <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -444,6 +445,12 @@ function onRowCommand(command, row) {
       query: { workflowId: String(row.workflowId), triggerType: 'SCHEDULE' },
     })
   }
+  if (command === 'problems') {
+    return router.push({
+      path: '/problems',
+      query: { workflowId: String(row.workflowId), triggerType: 'SCHEDULE' },
+    })
+  }
   if (command === 'delete') return onDelete(row)
 }
 
@@ -453,6 +460,11 @@ async function boot() {
     await Promise.all([loadMode(), load(), loadStats(), loadWorkflows()])
   } catch (error) {
     loadError.value = networkErrorMessage(error)
+  }
+  if (route.query.jobId) {
+    const row = records.value.find((item) => String(item.id) === String(route.query.jobId))
+    if (row) openEdit(row)
+    return
   }
   if (route.query.workflowId) {
     openCreate(route.query.workflowId)

@@ -4,7 +4,9 @@ import com.qingzhou.modules.component.entity.ApiComponent;
 import com.qingzhou.modules.component.service.ApiComponentService;
 import com.qingzhou.modules.dashboard.dto.DashboardOverviewVO;
 import com.qingzhou.modules.dashboard.dto.DashboardSummaryVO;
+import com.qingzhou.modules.dashboard.dto.DurationStatsVO;
 import com.qingzhou.modules.dashboard.dto.NamedCountVO;
+import com.qingzhou.modules.dashboard.dto.ScheduleHealthVO;
 import com.qingzhou.modules.dashboard.dto.TopItemVO;
 import com.qingzhou.modules.dashboard.mapper.DashboardMapper;
 import com.qingzhou.modules.dashboard.service.DashboardService;
@@ -102,7 +104,45 @@ public class DashboardServiceImpl implements DashboardService {
         vo.setTrend(DashboardStatsSupport.fillTrend(dashboardMapper.selectTrend(since), days, today));
         vo.setTopWorkflows(fillWorkflowNames(emptyIfNull(dashboardMapper.selectTopWorkflows(since, 5))));
         vo.setTopComponents(fillComponentNames(emptyIfNull(dashboardMapper.selectTopComponents(since, 5))));
+        vo.setTopFailedWorkflows(fillWorkflowNames(emptyIfNull(dashboardMapper.selectTopFailedWorkflows(since, 5))));
+        vo.setTopFailedComponents(fillComponentNames(emptyIfNull(dashboardMapper.selectTopFailedComponents(since, 5))));
+        vo.setDuration(buildDuration(emptyIfNull(dashboardMapper.selectDurations(since))));
+        vo.setScheduleHealth(buildScheduleHealth(since));
         return vo;
+    }
+
+    private DurationStatsVO buildDuration(List<Long> durations) {
+        DurationStatsVO duration = new DurationStatsVO();
+        duration.setSampleCount(durations.size());
+        duration.setAvgMs(DashboardStatsSupport.averageMs(durations));
+        duration.setP95Ms(DashboardStatsSupport.percentileMs(durations, 0.95));
+        return duration;
+    }
+
+    private ScheduleHealthVO buildScheduleHealth(LocalDateTime since) {
+        ScheduleHealthVO health = new ScheduleHealthVO();
+        long total = scheduleJobService.count();
+        long running = scheduleJobService.lambdaQuery().eq(ScheduleJob::getStatus, 1).count();
+        health.setTotal(total);
+        health.setRunning(running);
+        health.setStopped(Math.max(0, total - running));
+
+        long recentSuccess = 0;
+        long recentFailed = 0;
+        long recentTriggers = 0;
+        for (NamedCountVO item : emptyIfNull(dashboardMapper.selectStatusShareByTrigger(since, "SCHEDULE"))) {
+            long count = DashboardStatsSupport.nz(item.getCount());
+            recentTriggers += count;
+            if ("SUCCESS".equals(item.getName())) {
+                recentSuccess = count;
+            } else if ("FAILED".equals(item.getName()) || "TIMEOUT".equals(item.getName())) {
+                recentFailed += count;
+            }
+        }
+        health.setRecentTriggers(recentTriggers);
+        health.setRecentSuccess(recentSuccess);
+        health.setRecentFailed(recentFailed);
+        return health;
     }
 
     private List<TopItemVO> fillWorkflowNames(List<TopItemVO> items) {
@@ -114,6 +154,7 @@ public class DashboardServiceImpl implements DashboardService {
         for (TopItemVO item : items) {
             item.setTotal(DashboardStatsSupport.nz(item.getTotal()));
             item.setSuccessCount(DashboardStatsSupport.nz(item.getSuccessCount()));
+            item.setFailedCount(nzFailed(item));
             Workflow workflow = workflows.get(item.getId());
             if (workflow != null) {
                 item.setName(workflow.getWorkflowName());
@@ -141,6 +182,7 @@ public class DashboardServiceImpl implements DashboardService {
         for (TopItemVO item : items) {
             item.setTotal(DashboardStatsSupport.nz(item.getTotal()));
             item.setSuccessCount(DashboardStatsSupport.nz(item.getSuccessCount()));
+            item.setFailedCount(nzFailed(item));
             ApiComponent component = components.get(item.getCode());
             if (component != null) {
                 item.setId(component.getId());
@@ -150,6 +192,13 @@ public class DashboardServiceImpl implements DashboardService {
             }
         }
         return items;
+    }
+
+    private static long nzFailed(TopItemVO item) {
+        if (item.getFailedCount() != null) {
+            return DashboardStatsSupport.nz(item.getFailedCount());
+        }
+        return Math.max(0, DashboardStatsSupport.nz(item.getTotal()) - DashboardStatsSupport.nz(item.getSuccessCount()));
     }
 
     private static <T> List<T> emptyIfNull(List<T> list) {

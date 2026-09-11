@@ -38,8 +38,13 @@ public class ExecutionInstanceServiceImpl extends ServiceImpl<ExecutionInstanceM
         LambdaQueryWrapper<ExecutionInstance> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(query.getWorkflowId() != null, ExecutionInstance::getWorkflowId, query.getWorkflowId())
                 .eq(StringUtils.hasText(query.getTriggerType()), ExecutionInstance::getTriggerType, query.getTriggerType())
-                .eq(query.getTriggerAppId() != null, ExecutionInstance::getTriggerAppId, query.getTriggerAppId())
-                .eq(StringUtils.hasText(query.getStatus()), ExecutionInstance::getStatus, query.getStatus())
+                .eq(query.getTriggerAppId() != null, ExecutionInstance::getTriggerAppId, query.getTriggerAppId());
+        if (Boolean.TRUE.equals(query.getProblem())) {
+            wrapper.in(ExecutionInstance::getStatus, List.of("FAILED", "TIMEOUT"));
+        } else {
+            wrapper.eq(StringUtils.hasText(query.getStatus()), ExecutionInstance::getStatus, query.getStatus());
+        }
+        wrapper
                 .and(StringUtils.hasText(query.getKeyword()), w -> w
                         .like(ExecutionInstance::getExecutionNo, query.getKeyword())
                         .or()

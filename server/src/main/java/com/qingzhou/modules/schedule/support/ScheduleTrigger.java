@@ -33,7 +33,7 @@ public class ScheduleTrigger {
 
     public ExecutionVO fireJob(ScheduleJob job) {
         log.info("触发调度 jobId={} workflowId={}", job.getId(), job.getWorkflowId());
-        ExecutionVO vo = workflowEngine.run(job.getWorkflowId(), "SCHEDULE", null, parseTriggerInput(job));
+        ExecutionVO vo = workflowEngine.run(job.getWorkflowId(), "SCHEDULE", job.getId(), parseTriggerInput(job));
         touch(job, LocalDateTime.now());
         return vo;
     }

@@ -38,8 +38,10 @@ class DashboardStatsSupportTest {
         assertEquals("2026-09-10", points.get(1).getDate());
         assertEquals(4, points.get(1).getTotal());
         assertEquals(3, points.get(1).getSuccessCount());
+        assertEquals(25.0, points.get(1).getFailRate());
         assertEquals("2026-09-11", points.get(2).getDate());
         assertEquals(0, points.get(2).getTotal());
+        assertNull(points.get(2).getFailRate());
     }
 
     @Test
@@ -47,5 +49,15 @@ class DashboardStatsSupportTest {
         assertNull(DashboardStatsSupport.successRate(0, 0));
         assertEquals(100.0, DashboardStatsSupport.successRate(5, 0));
         assertEquals(66.7, DashboardStatsSupport.successRate(2, 1));
+    }
+
+    @Test
+    void failRateAndDurationStats() {
+        assertNull(DashboardStatsSupport.failRate(0, 0));
+        assertEquals(25.0, DashboardStatsSupport.failRate(1, 4));
+        assertEquals(100L, DashboardStatsSupport.averageMs(List.of(50L, 150L)));
+        assertEquals(150L, DashboardStatsSupport.percentileMs(List.of(10L, 20L, 30L, 150L), 0.95));
+        assertNull(DashboardStatsSupport.averageMs(List.of()));
+        assertNull(DashboardStatsSupport.percentileMs(null, 0.95));
     }
 }

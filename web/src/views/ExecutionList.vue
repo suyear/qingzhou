@@ -19,6 +19,7 @@
       <el-select v-model="status" placeholder="状态" clearable style="width: 120px" @change="onFilterChange">
         <el-option label="成功" value="SUCCESS" />
         <el-option label="失败" value="FAILED" />
+        <el-option label="超时" value="TIMEOUT" />
         <el-option label="运行中" value="RUNNING" />
       </el-select>
       <el-input
@@ -30,6 +31,7 @@
         @clear="reload"
       />
       <el-button @click="reload">查询</el-button>
+      <el-button @click="$router.push('/problems')">问题定位</el-button>
     </PageHeader>
     <PageState :error="loadError" @retry="load" />
     <div v-if="triggerAppId" class="qz-filter-chip">
@@ -74,7 +76,7 @@
       <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
             <div class="qz-ops" @click.stop>
-              <el-button type="primary" link @click="openDetail(row)">详情</el-button>
+              <el-button type="primary" link @click="openDetail(row)">链路</el-button>
               <el-button type="primary" link :disabled="row.status === 'RUNNING'" :loading="row._replaying" @click="onReplay(row)">重放</el-button>
             </div>
         </template>
@@ -97,36 +99,7 @@
     </div>
     </div>
 
-    <el-drawer
-      v-model="detailVisible"
-      title="执行详情"
-      size="80%"
-      class="qz-detail-drawer"
-      destroy-on-close
-      @closed="resetDetail"
-    >
-      <div v-loading="detailLoading" class="detail-shell">
-        <ExecutionLogView
-          v-if="detail"
-          :instance="detail.instance"
-          :logs="detail.logs"
-          :workflow-id="detailWorkflowId"
-          :workflow-name="detailWorkflowName"
-        >
-          <template #actions>
-            <el-button
-              type="primary"
-              :disabled="detail.instance.status === 'RUNNING'"
-              :loading="replaying"
-              @click="onReplay(detail.instance)"
-            >
-              重放此单
-            </el-button>
-          </template>
-        </ExecutionLogView>
-        <DetailEmpty v-else-if="!detailLoading" text="未能加载执行详情" />
-      </div>
-    </el-drawer>
+    <ExecutionChainDrawer ref="chainDrawer" :replay-loading="replaying" @replay="onReplay" />
   </div>
 </template>
 
@@ -137,11 +110,10 @@ import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import ExecutionLogView from '@/components/ExecutionLogView.vue'
-import DetailEmpty from '@/components/detail/DetailEmpty.vue'
+import ExecutionChainDrawer from '@/components/ExecutionChainDrawer.vue'
 import { askConfirm } from '@/utils/confirm'
-import { getWorkflow, pageWorkflows } from '@/api/workflow'
-import { getExecution, pageExecutions, replayExecution } from '@/api/execution'
+import { pageWorkflows } from '@/api/workflow'
+import { getExecutionChain, pageExecutions, replayExecution } from '@/api/execution'
 import { networkErrorMessage } from '@/api/http'
 import { copyText, durationText, execStatusLabel, formatTime } from '@/utils/format'
 
@@ -159,14 +131,9 @@ const workflowId = ref(route.query.workflowId ? Number(route.query.workflowId) :
 const triggerType = ref(route.query.triggerType || '')
 const triggerAppId = ref(route.query.triggerAppId ? Number(route.query.triggerAppId) : null)
 const status = ref(route.query.status || '')
-const detailVisible = ref(false)
-const detail = ref(null)
-const detailMeta = ref(null)
-const detailLoading = ref(false)
 const replaying = ref(false)
 const syncingQuery = ref(false)
-const detailWorkflowId = computed(() => detail.value?.instance?.workflowId || detailMeta.value?.workflowId)
-const detailWorkflowName = computed(() => detailMeta.value?.workflowName || `工作流 #${detailWorkflowId.value || ''}`)
+const chainDrawer = ref(null)
 const emptyText = computed(() => {
   if (keyword.value || workflowId.value || triggerType.value || status.value || triggerAppId.value) {
     return '没有匹配的执行记录'
@@ -242,41 +209,9 @@ function onPageChange() {
   load()
 }
 
-function resetDetail() {
-  detail.value = null
-  detailMeta.value = null
-}
-
-async function resolveWorkflowName(meta) {
-  if (meta?.workflowName) {
-    return meta
-  }
-  const id = meta?.workflowId || detail.value?.instance?.workflowId
-  if (!id) {
-    return meta
-  }
-  const cached = workflows.value.find((item) => item.id === id)
-  if (cached) {
-    return { ...meta, workflowId: id, workflowName: cached.workflowName }
-  }
-  try {
-    const res = await getWorkflow(id)
-    return { ...meta, workflowId: id, workflowName: res.data?.workflowName }
-  } catch {
-    return meta
-  }
-}
-
-async function openDetail(row) {
-  detailLoading.value = true
-  detailVisible.value = true
-  try {
-    const res = await getExecution(row.id)
-    detail.value = res.data
-    detailMeta.value = await resolveWorkflowName(row)
-  } finally {
-    detailLoading.value = false
-  }
+function openDetail(row) {
+  if (!row?.id) return
+  chainDrawer.value?.open(row.id)
 }
 
 async function onCopy(text, message = '已复制单号') {
@@ -303,13 +238,9 @@ async function onReplay(row) {
     current.value = 1
     syncQuery()
     await load()
-    if (res.data) {
-      detail.value = res.data
-      detailMeta.value = await resolveWorkflowName({
-        workflowId: res.data.instance?.workflowId,
-        workflowName: records.value.find((item) => item.id === res.data.instance?.id)?.workflowName,
-      })
-      detailVisible.value = true
+    if (res.data?.instance?.id) {
+      const chain = await getExecutionChain(res.data.instance.id)
+      chainDrawer.value?.setChain(chain.data)
     }
   } finally {
     if (row._replaying !== undefined) {
@@ -339,6 +270,9 @@ onMounted(async () => {
       load(),
     ])
     workflows.value = wfRes.data?.records || []
+    if (route.query.id) {
+      chainDrawer.value?.open(Number(route.query.id))
+    }
   } catch (error) {
     loadError.value = networkErrorMessage(error)
   }
@@ -346,7 +280,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.sub { color: #94a3b8; font-size: 12px; }
-.err { color: #dc2626; font-size: 12px; }
-.detail-shell { min-height: 160px; }
+.sub { color: var(--qz-text-muted); font-size: 12px; }
+.err { color: var(--qz-danger); font-size: 12px; }
 </style>

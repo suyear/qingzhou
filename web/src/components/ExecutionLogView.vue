@@ -1,6 +1,6 @@
 <template>
   <div v-if="instance" class="exec-log">
-    <DetailSection>
+    <DetailSection v-if="!compact">
       <div class="exec-head">
         <div class="exec-status">
           <StatusTag kind="exec" :value="instance.status" />
@@ -66,7 +66,11 @@
           :timestamp="formatTime(item.startTime)"
           :type="timelineType(item.status)"
         >
-          <div class="log-card" :class="`is-${(item.status || '').toLowerCase()}`">
+          <div
+            :ref="(el) => setNodeRef(item, el)"
+            class="log-card"
+            :class="[`is-${(item.status || '').toLowerCase()}`, { 'is-focus': isFocused(item) }]"
+          >
             <div class="log-title">
               <span>{{ index + 1 }}. {{ item.nodeName || item.nodeId }}</span>
               <StatusTag kind="exec" :value="item.status" />
@@ -113,7 +117,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import StatusTag from '@/components/StatusTag.vue'
 import DetailSection from '@/components/detail/DetailSection.vue'
@@ -129,9 +133,32 @@ const props = defineProps({
   workflowName: { type: String, default: '' },
   workflowId: { type: [Number, String], default: '' },
   executionLink: { type: String, default: '' },
+  highlightNodeId: { type: String, default: '' },
+  compact: { type: Boolean, default: false },
 })
 
 const opened = ref([])
+const nodeEls = new Map()
+const focusedNodeId = ref('')
+
+function nodeKey(item) {
+  return item?.nodeId || String(item?.id || '')
+}
+
+function setNodeRef(item, el) {
+  const key = nodeKey(item)
+  if (!key) return
+  if (el) nodeEls.set(key, el)
+  else nodeEls.delete(key)
+}
+
+function isProblem(status) {
+  return status === 'FAILED' || status === 'TIMEOUT'
+}
+
+function isFocused(item) {
+  return focusedNodeId.value && focusedNodeId.value === nodeKey(item)
+}
 
 const metaItems = computed(() => {
   const instance = props.instance || {}
@@ -179,16 +206,39 @@ function timelineType(status) {
 function syncOpened() {
   const next = []
   props.logs.forEach((item, index) => {
-    if (item.status === 'FAILED' || item.status === 'TIMEOUT') {
+    if (isProblem(item.status) || (props.highlightNodeId && nodeKey(item) === props.highlightNodeId)) {
       next.push(reqName(item, index))
     }
   })
   opened.value = next
 }
 
+async function focusNode(nodeId) {
+  if (!nodeId) return
+  focusedNodeId.value = nodeId
+  const index = props.logs.findIndex((item) => nodeKey(item) === nodeId)
+  if (index >= 0) {
+    const name = reqName(props.logs[index], index)
+    if (!opened.value.includes(name)) {
+      opened.value = [...opened.value, name]
+    }
+  }
+  await nextTick()
+  const el = nodeEls.get(nodeId)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+defineExpose({ focusNode })
+
 watch(
-  () => [props.instance?.id, props.logs],
-  () => syncOpened(),
+  () => [props.instance?.id, props.logs, props.highlightNodeId],
+  async () => {
+    syncOpened()
+    if (props.highlightNodeId) {
+      await nextTick()
+      focusNode(props.highlightNodeId)
+    }
+  },
   { immediate: true },
 )
 
@@ -259,6 +309,9 @@ async function copy(text, message = '已复制') {
 .log-card.is-success {
   border-color: #bbf7d0;
   background: #f8fffb;
+}
+.log-card.is-focus {
+  outline: 2px solid var(--el-color-primary-light-5);
 }
 .log-title {
   display: flex;
