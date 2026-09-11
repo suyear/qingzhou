@@ -165,46 +165,41 @@
     </div>
 
     <!-- 应用详情抽屉 -->
-    <el-drawer v-model="drawerVisible" :title="drawerApp?.appName || '应用详情'" size="440px" destroy-on-close>
+    <el-drawer
+      v-model="drawerVisible"
+      :title="drawerApp?.appName || '应用详情'"
+      size="520px"
+      class="qz-detail-drawer"
+      destroy-on-close
+    >
       <template v-if="drawerApp">
-        <div class="drawer-head">
-          <StatusTag kind="enable" :value="drawerApp.status" />
-          <StatusTag :type="readinessTag(drawerApp).type" :label="readinessTag(drawerApp).label" />
-        </div>
-
-        <div class="checklist">
-          <div class="check-item" :class="{ ok: drawerApp.status === 1 }">
-            <span class="check-dot" />
-            <span>应用已{{ drawerApp.status === 1 ? '启用' : '停用' }}</span>
-          </div>
-          <div class="check-item" :class="{ ok: drawerApp.grantedCount > 0 }">
-            <span class="check-dot" />
-            <span>{{ drawerApp.grantedCount > 0 ? `已授权 ${drawerApp.grantedCount} 个工作流` : '尚未授权工作流' }}</span>
-          </div>
-        </div>
-
-        <div class="drawer-block">
-          <div class="drawer-label">App Key</div>
-          <div class="secret-row">
-            <el-input :model-value="drawerApp.appKey" readonly />
-            <el-button @click="copyField(drawerApp.appKey, '已复制')">复制</el-button>
-          </div>
-        </div>
-
-        <div class="drawer-meta">
-          <div><span class="meta-k">QPS</span>{{ drawerApp.rateLimitQps > 0 ? drawerApp.rateLimitQps : '不限制' }}</div>
-          <div><span class="meta-k">IP 白名单</span>{{ formatIps(drawerApp.ipWhitelist) }}</div>
-          <div><span class="meta-k">更新时间</span>{{ formatTime(drawerApp.updateTime) }}</div>
-          <div v-if="drawerApp.remark"><span class="meta-k">备注</span>{{ drawerApp.remark }}</div>
-        </div>
-
-        <div class="drawer-actions">
-          <el-button type="primary" :disabled="drawerApp.status !== 1 || !drawerApp.grantedCount" @click="openInvoke(drawerApp); drawerVisible = false">
-            调用助手
-          </el-button>
-          <el-button @click="openGrant(drawerApp); drawerVisible = false">授权工作流</el-button>
-          <el-button @click="openEdit(drawerApp)">应用设置</el-button>
-          <el-button @click="goRecords(drawerApp)">调用记录</el-button>
+        <div class="drawer-stack">
+          <DetailSection title="应用状态">
+            <div class="drawer-head">
+              <StatusTag kind="enable" :value="drawerApp.status" />
+              <StatusTag :type="readinessTag(drawerApp).type" :label="readinessTag(drawerApp).label" />
+            </div>
+            <div class="checklist">
+              <div class="check-item" :class="{ ok: drawerApp.status === 1 }">
+                <span class="check-dot" />
+                <span>应用已{{ drawerApp.status === 1 ? '启用' : '停用' }}</span>
+              </div>
+              <div class="check-item" :class="{ ok: drawerApp.grantedCount > 0 }">
+                <span class="check-dot" />
+                <span>{{ drawerApp.grantedCount > 0 ? `已授权 ${drawerApp.grantedCount} 个工作流` : '尚未授权工作流' }}</span>
+              </div>
+            </div>
+            <DetailCopyField label="App Key" :value="drawerApp.appKey" copy-message="已复制" />
+            <DetailMetaList class="drawer-meta" :items="drawerMetaItems" />
+          </DetailSection>
+          <DetailActions>
+            <el-button type="primary" :disabled="drawerApp.status !== 1 || !drawerApp.grantedCount" @click="openInvoke(drawerApp); drawerVisible = false">
+              调用助手
+            </el-button>
+            <el-button @click="openGrant(drawerApp); drawerVisible = false">授权工作流</el-button>
+            <el-button @click="openEdit(drawerApp)">应用设置</el-button>
+            <el-button @click="goRecords(drawerApp)">调用记录</el-button>
+          </DetailActions>
         </div>
       </template>
     </el-drawer>
@@ -310,16 +305,10 @@
       </el-alert>
       <el-form label-position="top">
         <el-form-item label="App Key">
-          <div class="secret-row">
-            <el-input :model-value="createdSecret.appKey" readonly />
-            <el-button @click="copyField(createdSecret.appKey, '已复制 App Key')">复制</el-button>
-          </div>
+          <DetailCopyField :value="createdSecret.appKey" copy-message="已复制 App Key" />
         </el-form-item>
         <el-form-item label="App Secret">
-          <div class="secret-row">
-            <el-input :model-value="createdSecret.appSecret" readonly />
-            <el-button type="primary" @click="copyField(createdSecret.appSecret, '已复制 Secret')">复制</el-button>
-          </div>
+          <DetailCopyField :value="createdSecret.appSecret" copy-message="已复制 Secret" primary />
         </el-form-item>
       </el-form>
       <el-button class="copy-all-btn" @click="copyAllSecrets">一键复制 Key + Secret</el-button>
@@ -389,27 +378,37 @@
           <el-tabs v-model="invokeResultTab" class="result-tabs">
             <el-tab-pane label="试调结果" name="result">
               <div v-if="invokeResult" class="result-pane">
-                <div class="result-head">
-                  <el-tag :type="invokeOk ? 'success' : 'danger'" size="small">
-                    HTTP {{ invokeResult.httpStatus }} · {{ invokeOk ? '成功' : '失败' }}
-                  </el-tag>
-                  <el-button v-if="invokeOk" type="primary" link @click="goRecords(invokeApp)">查看记录</el-button>
-                </div>
-                <pre>{{ formatJson(invokeResult.response) }}</pre>
+                <DetailResultBanner
+                  :ok="invokeOk"
+                  :title="`HTTP ${invokeResult.httpStatus} · ${invokeOk ? '成功' : '失败'}`"
+                >
+                  <template #extra>
+                    <el-button v-if="invokeOk" type="primary" link @click="goRecords(invokeApp)">查看记录</el-button>
+                  </template>
+                  <DetailCodeBlock
+                    title="响应"
+                    :value="invokeResult.response"
+                    copy-message="已复制响应"
+                    max-height="300px"
+                  />
+                </DetailResultBanner>
               </div>
-              <el-empty v-else description="点击「走网关试调」查看响应" :image-size="72" />
+              <DetailEmpty v-else text="点击「走网关试调」查看响应" />
             </el-tab-pane>
             <el-tab-pane label="curl 代码" name="curl">
               <div v-if="preview?.curl" class="result-pane">
-                <div class="result-head">
-                  <span class="result-title">可复制到终端或 Postman</span>
-                  <el-button type="primary" link @click="copyCurl">复制 curl</el-button>
-                </div>
-                <pre>{{ annotatedCurl }}</pre>
+                <DetailCodeBlock
+                  title="可复制到终端或 Postman"
+                  :value="annotatedCurl"
+                  copy-label="复制 curl"
+                  copy-message="已复制 curl"
+                  tone="ink"
+                  max-height="320px"
+                />
                 <p v-if="preview.tip" class="hint">{{ preview.tip }}</p>
                 <p class="hint">curl 上方注释来自工作流 schema，复制后可直接给对接同学。</p>
               </div>
-              <el-empty v-else description="点击「生成 curl」或试调成功后自动出现" :image-size="72" />
+              <DetailEmpty v-else text="点击「生成 curl」或试调成功后自动出现" />
             </el-tab-pane>
           </el-tabs>
         </div>
@@ -431,6 +430,13 @@ import PageState from '@/components/PageState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import OpenApiDocsPanel from '@/components/OpenApiDocsPanel.vue'
 import ScheduleTriggerInput from '@/components/schedule/ScheduleTriggerInput.vue'
+import DetailSection from '@/components/detail/DetailSection.vue'
+import DetailCopyField from '@/components/detail/DetailCopyField.vue'
+import DetailMetaList from '@/components/detail/DetailMetaList.vue'
+import DetailActions from '@/components/detail/DetailActions.vue'
+import DetailCodeBlock from '@/components/detail/DetailCodeBlock.vue'
+import DetailResultBanner from '@/components/detail/DetailResultBanner.vue'
+import DetailEmpty from '@/components/detail/DetailEmpty.vue'
 import { askConfirm } from '@/utils/confirm'
 import { copyText, formatTime } from '@/utils/format'
 import { annotateCurlWithFields, examplePayloadFromSchema, schemaFieldGuide } from '@/utils/triggerInput'
@@ -510,6 +516,16 @@ const selectedInvokeWorkflow = computed(() =>
 const invokeFieldGuide = computed(() => schemaFieldGuide(selectedInvokeWorkflow.value?.inputSchema))
 
 const annotatedCurl = computed(() => annotateCurlWithFields(preview.value?.curl, invokeFieldGuide.value))
+const drawerMetaItems = computed(() => {
+  const app = drawerApp.value
+  if (!app) return []
+  return [
+    { label: 'QPS', value: app.rateLimitQps > 0 ? app.rateLimitQps : '不限制' },
+    { label: 'IP 白名单', value: formatIps(app.ipWhitelist) },
+    { label: '更新时间', value: formatTime(app.updateTime) },
+    { label: '备注', value: app.remark, hidden: !app.remark },
+  ]
+})
 
 const filteredGrantWorkflows = computed(() => {
   const q = grantKeyword.value.trim().toLowerCase()
@@ -868,18 +884,6 @@ async function runInvoke() {
   }
 }
 
-function formatJson(value) {
-  if (value == null) return ''
-  if (typeof value === 'string') return value
-  return JSON.stringify(value, null, 2)
-}
-
-async function copyCurl() {
-  if (!annotatedCurl.value) return
-  await copyText(annotatedCurl.value)
-  ElMessage.success('已复制 curl')
-}
-
 async function handleRouteQuery() {
   if (route.query.tab === 'docs') pageTab.value = 'docs'
   if (route.query.action === 'create') openCreate()
@@ -986,8 +990,9 @@ onMounted(async () => {
 }
 .docs-panel { padding: 16px 20px; }
 .empty-hint { margin: 0 0 12px; color: var(--qz-text-muted); font-size: 13px; }
-.drawer-head { display: flex; gap: 8px; margin-bottom: 16px; }
-.checklist { margin-bottom: 18px; }
+.drawer-stack { display: flex; flex-direction: column; gap: 12px; }
+.drawer-head { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.checklist { margin-bottom: 14px; }
 .check-item {
   display: flex;
   align-items: center;
@@ -1005,25 +1010,7 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 .check-item.ok .check-dot { background: var(--el-color-success); }
-.drawer-block { margin-bottom: 16px; }
-.drawer-label { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--qz-text-muted); }
-.drawer-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 20px;
-  font-size: 13px;
-}
-.meta-k {
-  display: inline-block;
-  width: 72px;
-  color: var(--qz-text-muted);
-}
-.drawer-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
+.drawer-meta { margin-top: 14px; }
 .mode-alert { margin-bottom: 12px; }
 .secret-row { display: flex; gap: 8px; width: 100%; }
 .copy-all-btn { width: 100%; margin-bottom: 12px; }
@@ -1122,25 +1109,7 @@ onMounted(async () => {
 .json-input :deep(textarea) { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
 .result-tabs { height: 100%; }
 .result-tabs :deep(.el-tabs__content) { height: calc(100% - 40px); }
-.result-pane pre {
-  margin: 8px 0 0;
-  padding: 12px;
-  max-height: 300px;
-  overflow: auto;
-  background: #0f172a;
-  color: #e2e8f0;
-  border-radius: 8px;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.result-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.result-title { font-size: 13px; font-weight: 600; }
+.result-pane { min-width: 0; }
 @media (max-width: 900px) {
   .flow-strip { flex-direction: column; padding-right: 14px; }
   .flow-arrow { display: none; }

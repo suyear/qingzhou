@@ -151,10 +151,13 @@
     </el-dialog>
 
     <el-dialog v-model="testVisible" title="凭证连通结果" width="480px">
-      <div v-if="testResult" class="test-result" :class="testResult.success ? 'ok' : 'fail'">
-        <div class="test-line">{{ testResult.success ? '连通成功' : '连通失败' }}</div>
-        <p>{{ testResult.message }}</p>
-      </div>
+      <DetailResultBanner
+        v-if="testResult"
+        :ok="testResult.success"
+        :title="testResult.success ? '连通成功' : '连通失败'"
+        :message="testResult.message"
+      />
+      <DetailEmpty v-else text="暂无连通结果" />
       <template #footer>
         <el-button @click="testVisible = false">关闭</el-button>
       </template>
@@ -167,6 +170,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
+import DetailResultBanner from '@/components/detail/DetailResultBanner.vue'
+import DetailEmpty from '@/components/detail/DetailEmpty.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { askConfirm } from '@/utils/confirm'
 import { pageWorkflows } from '@/api/workflow'
@@ -385,22 +390,6 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--qz-text-muted);
   line-height: 1.45;
-}
-.test-result {
-  padding: 12px;
-  border-radius: 8px;
-}
-.test-result.ok {
-  border: 1px solid #bbf7d0;
-  background: #f0fdf4;
-}
-.test-result.fail {
-  border: 1px solid #fecaca;
-  background: #fef2f2;
-}
-.test-line {
-  font-weight: 600;
-  margin-bottom: 8px;
 }
 </style>
 

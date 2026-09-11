@@ -1,135 +1,127 @@
 <template>
   <div v-if="instance" class="exec-log">
-    <div class="exec-head">
-      <div class="exec-status">
-        <el-tag size="small" :type="execStatusType(instance.status)">{{ execStatusLabel(instance.status) }}</el-tag>
-        <span class="exec-no">
-          单号
-          <el-button type="primary" link @click="copy(instance.executionNo, '已复制单号')">{{ instance.executionNo }}</el-button>
-        </span>
-      </div>
-      <el-button
-        v-if="executionLink"
-        type="primary"
-        link
-        @click="$router.push(executionLink)"
-      >
-        去运行记录
-      </el-button>
-    </div>
-
-    <p v-if="workflowName" class="exec-line">
-      工作流：
-      <el-button v-if="workflowId" type="primary" link @click="$router.push(`/designer/${workflowId}`)">
-        {{ workflowName }}
-      </el-button>
-      <span v-else>{{ workflowName }}</span>
-    </p>
-    <p class="exec-line">
-      触发：{{ triggerLabel(instance.triggerType) }}
-      <span v-if="instance.snapshotId">　快照：{{ instance.snapshotId }}</span>
-      <span v-else>　快照：草稿</span>
-      <span v-if="instance.durationMs != null">　总耗时 {{ durationText(instance.durationMs) }}</span>
-    </p>
-    <p v-if="instance.traceId" class="exec-line">
-      Trace：
-      <el-button type="primary" link @click="copy(instance.traceId, '已复制 Trace')">{{ instance.traceId }}</el-button>
-    </p>
-    <p v-if="instance.errorMsg" class="err">{{ instance.errorMsg }}</p>
-
-    <div class="io-compare">
-      <div class="io-col">
-        <div class="payload-head">
-          <span>入参</span>
-          <el-button type="primary" link @click="copy(formatJson(instance.inputParams), '已复制入参')">复制</el-button>
+    <DetailSection>
+      <div class="exec-head">
+        <div class="exec-status">
+          <StatusTag kind="exec" :value="instance.status" />
+          <span class="exec-no">
+            单号
+            <el-button type="primary" link @click="copy(instance.executionNo, '已复制单号')">
+              {{ instance.executionNo }}
+            </el-button>
+          </span>
         </div>
-        <pre class="payload">{{ formatJson(instance.inputParams) }}</pre>
-      </div>
-      <div class="io-col">
-        <div class="payload-head">
-          <span>出参</span>
+        <div class="exec-head-actions">
           <el-button
-            v-if="instance.outputResult"
+            v-if="executionLink"
             type="primary"
             link
-            @click="copy(formatJson(instance.outputResult), '已复制出参')"
+            @click="$router.push(executionLink)"
           >
-            复制
+            去运行记录
           </el-button>
+          <slot name="actions" />
         </div>
-        <pre class="payload">{{ instance.outputResult ? formatJson(instance.outputResult) : '暂无出参' }}</pre>
       </div>
-    </div>
 
-    <div v-if="!logs.length" class="muted">还没有节点日志</div>
-    <el-timeline v-else>
-      <el-timeline-item
-        v-for="(item, index) in logs"
-        :key="item.id || index"
-        :timestamp="formatTime(item.startTime)"
-        :type="timelineType(item.status)"
-      >
-        <div class="log-title">
-          <span>{{ index + 1 }}. {{ item.nodeName || item.nodeId }}</span>
-          <el-tag size="small" :type="execStatusType(item.status)">{{ execStatusLabel(item.status) }}</el-tag>
-        </div>
-        <div class="log-sub">
-          <span>{{ item.requestMethod }} {{ item.requestUrl || '—' }}</span>
-        </div>
-        <div v-if="item.errorMsg" class="err">{{ item.errorMsg }}</div>
-        <div v-else class="log-meta">
-          HTTP {{ item.responseStatus ?? '—' }}　耗时 {{ durationText(item.durationMs) }}　重试 {{ item.retryCount || 0 }}
-        </div>
-        <el-collapse v-if="hasIo(item)" v-model="opened" class="io-collapse">
-          <el-collapse-item :name="reqName(item, index)" title="请求 / 响应">
-            <div class="io-compare">
-              <div class="io-col">
-                <div class="payload-head">
-                  <span>请求</span>
-                  <el-button
-                    v-if="item.requestBody"
-                    type="primary"
-                    link
-                    @click="copy(formatJson(item.requestBody), '已复制请求')"
-                  >
-                    复制
-                  </el-button>
-                </div>
-                <pre class="payload">{{ item.requestBody ? formatJson(item.requestBody) : '—' }}</pre>
-                <template v-if="item.requestHeaders">
-                  <div class="payload-head">
-                    <span>请求头</span>
-                    <el-button type="primary" link @click="copy(formatJson(item.requestHeaders), '已复制请求头')">复制</el-button>
-                  </div>
-                  <pre class="payload">{{ formatJson(item.requestHeaders) }}</pre>
-                </template>
-              </div>
-              <div class="io-col">
-                <div class="payload-head">
-                  <span>响应</span>
-                  <el-button
-                    v-if="item.responseBody"
-                    type="primary"
-                    link
-                    @click="copy(formatJson(item.responseBody), '已复制响应')"
-                  >
-                    复制
-                  </el-button>
-                </div>
-                <pre class="payload">{{ item.responseBody ? formatJson(item.responseBody) : '—' }}</pre>
-              </div>
+      <DetailMetaList :items="metaItems" :columns="2">
+        <template #workflow="{ item }">
+          <el-button
+            v-if="workflowId"
+            type="primary"
+            link
+            @click="$router.push(`/designer/${workflowId}`)"
+          >
+            {{ item.value }}
+          </el-button>
+          <span v-else>{{ item.value }}</span>
+        </template>
+      </DetailMetaList>
+
+      <div v-if="instance.errorMsg" class="exec-error">
+        <div class="exec-error__label">失败原因</div>
+        <p>{{ instance.errorMsg }}</p>
+      </div>
+    </DetailSection>
+
+    <DetailSection title="入参 / 出参" hint="左侧为触发时传入的数据，右侧为工作流最终输出">
+      <DetailCompare
+        left-title="入参"
+        right-title="出参"
+        :left-value="instance.inputParams"
+        :right-value="instance.outputResult"
+        left-empty="暂无入参"
+        right-empty="暂无出参"
+        left-copy-message="已复制入参"
+        right-copy-message="已复制出参"
+      />
+    </DetailSection>
+
+    <DetailSection title="节点日志" :hint="logs.length ? `共 ${logs.length} 个节点` : ''">
+      <DetailEmpty v-if="!logs.length" text="还没有节点日志" />
+      <el-timeline v-else class="log-timeline">
+        <el-timeline-item
+          v-for="(item, index) in logs"
+          :key="item.id || index"
+          :timestamp="formatTime(item.startTime)"
+          :type="timelineType(item.status)"
+        >
+          <div class="log-card" :class="`is-${(item.status || '').toLowerCase()}`">
+            <div class="log-title">
+              <span>{{ index + 1 }}. {{ item.nodeName || item.nodeId }}</span>
+              <StatusTag kind="exec" :value="item.status" />
             </div>
-          </el-collapse-item>
-        </el-collapse>
-      </el-timeline-item>
-    </el-timeline>
+            <div class="log-sub qz-mono">{{ item.requestMethod }} {{ item.requestUrl || '—' }}</div>
+            <div v-if="item.errorMsg" class="log-error">{{ item.errorMsg }}</div>
+            <div v-else class="log-meta">
+              HTTP {{ item.responseStatus ?? '—' }}
+              <span>耗时 {{ durationText(item.durationMs) }}</span>
+              <span>重试 {{ item.retryCount || 0 }}</span>
+            </div>
+            <template v-if="hasIo(item)">
+              <button type="button" class="io-toggle" @click="toggle(reqName(item, index))">
+                {{ isOpen(reqName(item, index)) ? '收起请求 / 响应' : '展开请求 / 响应' }}
+              </button>
+              <div v-show="isOpen(reqName(item, index))" class="io-panel">
+                <DetailCompare
+                  left-title="请求"
+                  right-title="响应"
+                  :left-value="item.requestBody"
+                  :right-value="item.responseBody"
+                  left-empty="暂无请求体"
+                  right-empty="暂无响应体"
+                  left-copy-message="已复制请求"
+                  right-copy-message="已复制响应"
+                  max-height="220px"
+                />
+                <DetailCodeBlock
+                  v-if="item.requestHeaders"
+                  class="io-headers"
+                  title="请求头"
+                  :value="item.requestHeaders"
+                  copy-message="已复制请求头"
+                  max-height="160px"
+                />
+              </div>
+            </template>
+          </div>
+        </el-timeline-item>
+      </el-timeline>
+    </DetailSection>
   </div>
+  <DetailEmpty v-else text="暂无执行详情" />
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { copyText, durationText, execStatusLabel, execStatusType, formatJson, formatTime, triggerLabel } from '@/utils/format'
+import StatusTag from '@/components/StatusTag.vue'
+import DetailSection from '@/components/detail/DetailSection.vue'
+import DetailMetaList from '@/components/detail/DetailMetaList.vue'
+import DetailCompare from '@/components/detail/DetailCompare.vue'
+import DetailCodeBlock from '@/components/detail/DetailCodeBlock.vue'
+import DetailEmpty from '@/components/detail/DetailEmpty.vue'
+import { copyText, durationText, formatTime, triggerLabel } from '@/utils/format'
 
 const props = defineProps({
   instance: { type: Object, default: null },
@@ -141,12 +133,40 @@ const props = defineProps({
 
 const opened = ref([])
 
+const metaItems = computed(() => {
+  const instance = props.instance || {}
+  return [
+    {
+      label: '工作流',
+      value: props.workflowName || (instance.workflowId ? `#${instance.workflowId}` : ''),
+      slot: props.workflowId ? 'workflow' : undefined,
+    },
+    { label: '触发', value: triggerLabel(instance.triggerType) },
+    { label: '快照', value: instance.snapshotId ? String(instance.snapshotId) : '草稿' },
+    { label: '总耗时', value: durationText(instance.durationMs) },
+    { label: 'Trace', value: instance.traceId, mono: true, copy: true, copyMessage: '已复制 Trace', hidden: !instance.traceId },
+    { label: '开始时间', value: formatTime(instance.startTime), hidden: !instance.startTime },
+  ]
+})
+
 function reqName(item, index) {
   return `${item.id || index}-req`
 }
 
 function hasIo(item) {
   return Boolean(item.requestBody || item.responseBody || item.requestHeaders)
+}
+
+function isOpen(name) {
+  return opened.value.includes(name)
+}
+
+function toggle(name) {
+  if (isOpen(name)) {
+    opened.value = opened.value.filter((item) => item !== name)
+    return
+  }
+  opened.value = [...opened.value, name]
 }
 
 function timelineType(status) {
@@ -179,14 +199,20 @@ async function copy(text, message = '已复制') {
 </script>
 
 <style scoped>
+.exec-log {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .exec-head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
 }
-.exec-status {
+.exec-status,
+.exec-head-actions {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -194,73 +220,92 @@ async function copy(text, message = '已复制') {
 }
 .exec-no {
   font-size: 13px;
+  color: var(--qz-text-secondary);
 }
-.exec-line {
-  margin: 0 0 8px;
+.exec-error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--qz-radius-sm);
+  background: var(--qz-danger-soft);
+  border: 1px solid #fecaca;
+}
+.exec-error__label {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--qz-danger);
+  margin-bottom: 4px;
+}
+.exec-error p {
+  margin: 0;
   font-size: 13px;
+  line-height: 1.55;
+  color: var(--qz-text);
   word-break: break-all;
+}
+.log-timeline {
+  padding-left: 4px;
+}
+.log-card {
+  padding: 12px 14px;
+  border: 1px solid var(--qz-border);
+  border-radius: var(--qz-radius-sm);
+  background: var(--qz-fill);
+}
+.log-card.is-failed,
+.log-card.is-timeout {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+.log-card.is-success {
+  border-color: #bbf7d0;
+  background: #f8fffb;
 }
 .log-title {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  font-weight: 600;
+  font-weight: 650;
+  font-size: 13px;
 }
 .log-sub,
 .log-meta {
   color: var(--qz-text-muted);
   font-size: 12px;
   word-break: break-all;
-  margin-top: 4px;
+  margin-top: 6px;
 }
-.err {
-  color: #dc2626;
+.log-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.log-error {
+  margin-top: 8px;
+  color: var(--qz-danger);
   font-size: 12px;
-  margin: 6px 0;
+  line-height: 1.5;
   word-break: break-all;
 }
-.payload-block {
-  margin: 12px 0 16px;
-}
-.io-compare {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin: 10px 0 16px;
-}
-.io-col {
-  min-width: 0;
-}
-.payload-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
+.io-toggle {
+  margin-top: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--el-color-primary);
   font-size: 12px;
   font-weight: 600;
-  color: var(--qz-text-muted);
+  cursor: pointer;
 }
-.payload {
-  margin: 0 0 8px;
-  padding: 8px 10px;
-  background: #f8fafc;
-  border: 1px solid var(--qz-border, #e8eef5);
-  border-radius: 6px;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 240px;
-  overflow: auto;
+.io-panel {
+  margin-top: 10px;
 }
-.io-collapse {
-  margin-top: 8px;
-}
-.muted {
-  color: var(--qz-text-muted);
-  font-size: 13px;
+.io-headers {
+  margin-top: 10px;
 }
 @media (max-width: 720px) {
-  .io-compare { grid-template-columns: 1fr; }
+  .exec-head {
+    flex-direction: column;
+  }
 }
 </style>

@@ -129,7 +129,13 @@
             {{ previewCount ? `${previewCount} 个参数` : '未配置' }}
           </el-tag>
         </div>
-        <pre class="preview-json" :class="{ empty: !previewCount }">{{ previewText }}</pre>
+        <DetailCodeBlock
+          title="实际传参"
+          :value="previewCount ? previewObject : null"
+          empty-text="尚未填写参数"
+          copy-message="已复制传参"
+          max-height="220px"
+        />
         <ul v-if="previewLines.length" class="preview-plain">
           <li v-for="line in previewLines" :key="line.key">
             <span class="plain-key">{{ line.label }}</span>
@@ -144,6 +150,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
+import DetailCodeBlock from '@/components/detail/DetailCodeBlock.vue'
 import { fieldLabel } from '@/utils/workflowBinding'
 import { parseJson, schemaToFields } from '@/utils/schema'
 import {
@@ -195,7 +202,6 @@ watch(
   { immediate: true },
 )
 
-const previewText = computed(() => formatTriggerPreview(previewObject.value))
 const previewCount = computed(() => previewKeyCount(previewObject.value))
 
 const previewLines = computed(() => {
@@ -481,24 +487,6 @@ defineExpose({
   margin-bottom: 8px;
   font-size: 13px;
   font-weight: 600;
-}
-
-.preview-json {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #1e1e1e;
-  color: #d4d4d4;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  min-height: 120px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.preview-json.empty {
-  color: #888;
 }
 
 .preview-plain {
