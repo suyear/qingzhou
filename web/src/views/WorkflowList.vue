@@ -120,20 +120,22 @@
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <div class="qz-ops" @click.stop>
-              <el-button type="primary" size="small" @click="$router.push(`/designer/${row.id}`)">编排</el-button>
+              <el-button type="primary" link @click="$router.push(`/designer/${row.id}`)">编排</el-button>
               <el-button
                 v-if="row.status !== 'PUBLISHED' || hasDraftChanges(row)"
-                size="small"
+                type="primary"
+                link
                 @click="onPublish(row)"
               >
                 {{ row.status === 'DISABLED' ? '重新发布' : '发布' }}
               </el-button>
               <el-dropdown trigger="click" @command="(cmd) => onRowCommand(cmd, row)">
-                <el-button size="small">更多</el-button>
+                <el-button type="primary" link>更多</el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="detail">查看详情</el-dropdown-item>
                     <el-dropdown-item command="records">运行记录</el-dropdown-item>
+                    <el-dropdown-item command="problems">失败链路</el-dropdown-item>
                     <el-dropdown-item v-if="row.status === 'PUBLISHED'" command="schedule">创建定时调度</el-dropdown-item>
                     <el-dropdown-item v-if="row.status === 'PUBLISHED'" command="openapi">开放 API 授权</el-dropdown-item>
                     <el-dropdown-item v-if="row.status !== 'DISABLED'" command="disable" divided>停用</el-dropdown-item>
@@ -167,7 +169,7 @@
     <el-drawer
       v-model="drawerVisible"
       :title="drawerRow?.workflowName || '工作流详情'"
-      size="520px"
+      size="560px"
       class="qz-detail-drawer"
     >
       <template v-if="drawerRow">
@@ -181,10 +183,12 @@
             <DetailCopyField label="编码" :value="drawerRow.workflowCode" copy-message="已复制编码" />
             <DetailMetaList class="drawer-meta" :items="drawerMetaItems" />
           </DetailSection>
+          <LineagePanel v-if="drawerRow.id" type="workflow" :id="drawerRow.id" />
           <DetailActions>
             <el-button type="primary" @click="goDesigner(drawerRow)">继续编排</el-button>
             <el-button type="warning" @click="onPublish(drawerRow)">发布</el-button>
             <el-button @click="goRecords(drawerRow)">运行记录</el-button>
+            <el-button @click="goProblems(drawerRow)">失败链路</el-button>
             <el-button v-if="drawerRow.status === 'PUBLISHED'" @click="goSchedule(drawerRow)">创建调度</el-button>
             <el-button v-if="drawerRow.status === 'PUBLISHED'" @click="goOpenapi">开放授权</el-button>
           </DetailActions>
@@ -221,6 +225,7 @@ import DetailSection from '@/components/detail/DetailSection.vue'
 import DetailCopyField from '@/components/detail/DetailCopyField.vue'
 import DetailMetaList from '@/components/detail/DetailMetaList.vue'
 import DetailActions from '@/components/detail/DetailActions.vue'
+import LineagePanel from '@/components/LineagePanel.vue'
 import { askConfirm } from '@/utils/confirm'
 import { copyText, formatTime } from '@/utils/format'
 import { disableWorkflow, pageWorkflows, publishWorkflow } from '@/api/workflow'
@@ -362,6 +367,10 @@ function goRecords(row) {
   router.push({ path: '/executions', query: { workflowId: String(row.id) } })
 }
 
+function goProblems(row) {
+  router.push({ path: '/problems', query: { workflowId: String(row.id) } })
+}
+
 function goSchedule(row) {
   const query = row?.id ? { workflowId: String(row.id) } : {}
   router.push({ path: '/schedules', query })
@@ -397,6 +406,7 @@ async function onDisable(row) {
 function onRowCommand(command, row) {
   if (command === 'detail') return onRowClick(row)
   if (command === 'records') return goRecords(row)
+  if (command === 'problems') return goProblems(row)
   if (command === 'schedule') return goSchedule(row)
   if (command === 'openapi') return goOpenapi()
   if (command === 'disable') return onDisable(row)

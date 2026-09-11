@@ -15,4 +15,8 @@ public class DashboardOverviewVO {
     private List<NamedCountVO> triggerShare = new ArrayList<>();
     private List<TopItemVO> topWorkflows = new ArrayList<>();
     private List<TopItemVO> topComponents = new ArrayList<>();
+    private List<TopItemVO> topFailedWorkflows = new ArrayList<>();
+    private List<TopItemVO> topFailedComponents = new ArrayList<>();
+    private DurationStatsVO duration = new DurationStatsVO();
+    private ScheduleHealthVO scheduleHealth = new ScheduleHealthVO();
 }

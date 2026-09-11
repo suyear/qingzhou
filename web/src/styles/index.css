@@ -265,6 +265,33 @@ body,
   width: 220px;
 }
 
+.qz-detail-section {
+  margin: 16px 0;
+}
+.qz-detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--qz-text-muted);
+}
+.qz-detail-desc {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--qz-text-muted);
+  line-height: 1.5;
+}
+.qz-detail-line {
+  margin: 0 0 8px;
+  font-size: 13px;
+  word-break: break-all;
+}
+.qz-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .qz-filter-chip {
   display: inline-flex;
   align-items: center;

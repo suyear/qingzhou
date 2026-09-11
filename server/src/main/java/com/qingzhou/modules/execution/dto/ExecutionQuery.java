@@ -12,4 +12,6 @@ public class ExecutionQuery extends PageQuery {
     private String triggerType;
     private Long triggerAppId;
     private String status;
+    /** 仅看失败/超时，用于问题定位 */
+    private Boolean problem;
 }

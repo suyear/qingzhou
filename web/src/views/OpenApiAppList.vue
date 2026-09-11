@@ -131,7 +131,7 @@
                   调用助手
                 </el-button>
                 <el-dropdown trigger="click" @command="(cmd) => onRowCommand(cmd, row)">
-                  <el-button>更多</el-button>
+                  <el-button type="primary" link>更多</el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item command="detail">应用详情</el-dropdown-item>
@@ -168,7 +168,7 @@
     <el-drawer
       v-model="drawerVisible"
       :title="drawerApp?.appName || '应用详情'"
-      size="520px"
+      size="560px"
       class="qz-detail-drawer"
       destroy-on-close
     >
@@ -199,6 +199,7 @@
             <el-button @click="openGrant(drawerApp); drawerVisible = false">授权工作流</el-button>
             <el-button @click="openEdit(drawerApp)">应用设置</el-button>
             <el-button @click="goRecords(drawerApp)">调用记录</el-button>
+            <el-button @click="goProblems(drawerApp)">失败链路</el-button>
           </DetailActions>
         </div>
       </template>
@@ -729,6 +730,14 @@ function goRecords(row) {
   })
 }
 
+function goProblems(row) {
+  if (!row) return
+  router.push({
+    path: '/problems',
+    query: { triggerType: 'OPENAPI' },
+  })
+}
+
 async function onRowCommand(command, row) {
   if (command === 'detail') return openDetail(row)
   if (command === 'grant') return openGrant(row)
@@ -1016,7 +1025,7 @@ onMounted(async () => {
 .copy-all-btn { width: 100%; margin-bottom: 12px; }
 .secret-check { margin-top: 4px; }
 .hint { color: var(--qz-text-muted); margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
-.muted { margin-left: 8px; color: #94a3b8; font-size: 12px; }
+.muted { margin-left: 8px; color: var(--qz-text-muted); font-size: 12px; }
 .create-advanced { margin-top: 4px; border: none; }
 .create-advanced :deep(.el-collapse-item__header) { font-size: 13px; color: var(--qz-text-muted); border: none; }
 .create-advanced :deep(.el-collapse-item__wrap) { border: none; }

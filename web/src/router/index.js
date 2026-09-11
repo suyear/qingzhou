@@ -14,6 +14,7 @@ const router = createRouter({
         { path: '/schedules', name: 'schedules', component: () => import('@/views/ScheduleJobList.vue') },
         { path: '/credentials', name: 'credentials', component: () => import('@/views/CredentialList.vue') },
         { path: '/executions', name: 'executions', component: () => import('@/views/ExecutionList.vue') },
+        { path: '/problems', name: 'problems', component: () => import('@/views/ProblemLocator.vue') },
         { path: '/openapi', name: 'openapi', component: () => import('@/views/OpenApiAppList.vue') },
         {
           path: '/designer/:id?',

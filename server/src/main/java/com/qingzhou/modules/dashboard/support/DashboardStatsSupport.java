@@ -56,6 +56,7 @@ public final class DashboardStatsSupport {
             point.setSuccessCount(nz(row.getSuccessCount()));
             point.setFailedCount(nz(row.getFailedCount()));
             point.setRunningCount(nz(row.getRunningCount()));
+            point.setFailRate(failRate(point.getFailedCount(), point.getSuccessCount() + point.getFailedCount()));
             points.add(point);
         }
         return points;
@@ -67,6 +68,49 @@ public final class DashboardStatsSupport {
             return null;
         }
         return Math.round(success * 1000.0 / finished) / 10.0;
+    }
+
+    public static Double failRate(long failed, long finished) {
+        if (finished <= 0) {
+            return null;
+        }
+        return Math.round(failed * 1000.0 / finished) / 10.0;
+    }
+
+    public static Long averageMs(List<Long> durations) {
+        List<Long> values = cleanDurations(durations);
+        if (values.isEmpty()) {
+            return null;
+        }
+        long sum = 0;
+        for (Long value : values) {
+            sum += value;
+        }
+        return Math.round(sum / (double) values.size());
+    }
+
+    public static Long percentileMs(List<Long> durations, double percentile) {
+        List<Long> values = cleanDurations(durations);
+        if (values.isEmpty()) {
+            return null;
+        }
+        values.sort(Long::compareTo);
+        double ratio = Math.min(1.0, Math.max(0.0, percentile));
+        int index = (int) Math.ceil(values.size() * ratio) - 1;
+        return values.get(Math.max(0, Math.min(index, values.size() - 1)));
+    }
+
+    private static List<Long> cleanDurations(List<Long> durations) {
+        List<Long> values = new ArrayList<>();
+        if (durations == null) {
+            return values;
+        }
+        for (Long value : durations) {
+            if (value != null && value >= 0) {
+                values.add(value);
+            }
+        }
+        return values;
     }
 
     public static NamedCountVO named(String name, String label, long count) {

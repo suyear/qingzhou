@@ -10,4 +10,5 @@ public class TopItemVO {
     private String code;
     private Long total;
     private Long successCount;
+    private Long failedCount;
 }
