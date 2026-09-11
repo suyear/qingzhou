@@ -925,8 +925,8 @@ watch(() => props.visible, (open) => {
   box-shadow: 0 0 0 2px var(--qz-primary-soft);
 }
 .entry-icon { font-size: 20px; }
-.entry-label { font-size: 13px; font-weight: 600; }
-.entry-sub { font-size: 11px; color: var(--qz-text-muted); }
+.entry-label { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.entry-sub { font-size: 11px; color: var(--qz-text-muted); white-space: nowrap; }
 .step-banner {
   margin-bottom: 16px;
   padding: 12px 14px;
