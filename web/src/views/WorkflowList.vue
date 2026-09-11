@@ -164,32 +164,30 @@
     </div>
 
     <!-- 详情抽屉 -->
-    <el-drawer v-model="drawerVisible" :title="drawerRow?.workflowName || '工作流详情'" size="440px">
+    <el-drawer
+      v-model="drawerVisible"
+      :title="drawerRow?.workflowName || '工作流详情'"
+      size="520px"
+      class="qz-detail-drawer"
+    >
       <template v-if="drawerRow">
-        <div class="drawer-tags">
-          <StatusTag kind="workflow" :value="drawerRow.status" />
-          <el-tag v-if="hasDraftChanges(drawerRow)" size="small" type="warning">草稿有修改</el-tag>
-          <el-tag size="small" type="info">v{{ drawerRow.version || 1 }}</el-tag>
-        </div>
-        <div class="drawer-block">
-          <div class="drawer-label">编码</div>
-          <div class="secret-row">
-            <el-input :model-value="drawerRow.workflowCode" readonly />
-            <el-button @click="copyCode(drawerRow.workflowCode)">复制</el-button>
-          </div>
-        </div>
-        <div class="drawer-meta">
-          <div><span class="meta-k">节点数</span>{{ nodeCount(drawerRow) }}</div>
-          <div><span class="meta-k">更新时间</span>{{ formatTime(drawerRow.updateTime) }}</div>
-          <div v-if="drawerRow.publishTime"><span class="meta-k">最近发布</span>{{ formatTime(drawerRow.publishTime) }}</div>
-          <div v-if="drawerRow.description"><span class="meta-k">说明</span>{{ drawerRow.description }}</div>
-        </div>
-        <div class="drawer-actions">
-          <el-button type="primary" @click="goDesigner(drawerRow)">继续编排</el-button>
-          <el-button type="warning" @click="onPublish(drawerRow)">发布</el-button>
-          <el-button @click="goRecords(drawerRow)">运行记录</el-button>
-          <el-button v-if="drawerRow.status === 'PUBLISHED'" @click="goSchedule(drawerRow)">创建调度</el-button>
-          <el-button v-if="drawerRow.status === 'PUBLISHED'" @click="goOpenapi">开放授权</el-button>
+        <div class="drawer-stack">
+          <DetailSection title="基本信息">
+            <div class="drawer-tags">
+              <StatusTag kind="workflow" :value="drawerRow.status" />
+              <el-tag v-if="hasDraftChanges(drawerRow)" size="small" type="warning">草稿有修改</el-tag>
+              <el-tag size="small" type="info">v{{ drawerRow.version || 1 }}</el-tag>
+            </div>
+            <DetailCopyField label="编码" :value="drawerRow.workflowCode" copy-message="已复制编码" />
+            <DetailMetaList class="drawer-meta" :items="drawerMetaItems" />
+          </DetailSection>
+          <DetailActions>
+            <el-button type="primary" @click="goDesigner(drawerRow)">继续编排</el-button>
+            <el-button type="warning" @click="onPublish(drawerRow)">发布</el-button>
+            <el-button @click="goRecords(drawerRow)">运行记录</el-button>
+            <el-button v-if="drawerRow.status === 'PUBLISHED'" @click="goSchedule(drawerRow)">创建调度</el-button>
+            <el-button v-if="drawerRow.status === 'PUBLISHED'" @click="goOpenapi">开放授权</el-button>
+          </DetailActions>
         </div>
       </template>
     </el-drawer>
@@ -219,6 +217,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import DetailSection from '@/components/detail/DetailSection.vue'
+import DetailCopyField from '@/components/detail/DetailCopyField.vue'
+import DetailMetaList from '@/components/detail/DetailMetaList.vue'
+import DetailActions from '@/components/detail/DetailActions.vue'
 import { askConfirm } from '@/utils/confirm'
 import { copyText, formatTime } from '@/utils/format'
 import { disableWorkflow, pageWorkflows, publishWorkflow } from '@/api/workflow'
@@ -252,6 +254,16 @@ const statDisabled = computed(() => statRecords.value.filter((item) => item.stat
 const emptyText = computed(() => {
   if (keyword.value || statusFilter.value) return '没有匹配的工作流'
   return '还没有工作流，打开设计器后从「添加接口」点选第一步'
+})
+const drawerMetaItems = computed(() => {
+  const row = drawerRow.value
+  if (!row) return []
+  return [
+    { label: '节点数', value: nodeCount(row) },
+    { label: '更新时间', value: formatTime(row.updateTime) },
+    { label: '最近发布', value: formatTime(row.publishTime), hidden: !row.publishTime },
+    { label: '说明', value: row.description, hidden: !row.description },
+  ]
 })
 
 function dismissGuide() {
@@ -465,23 +477,9 @@ async function boot() {
   font-size: 12px;
   color: var(--qz-text-muted);
 }
-.drawer-tags { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.drawer-block { margin-bottom: 16px; }
-.drawer-label { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--qz-text-muted); }
-.secret-row { display: flex; gap: 8px; }
-.drawer-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 20px;
-  font-size: 13px;
-}
-.meta-k { display: inline-block; width: 72px; color: var(--qz-text-muted); }
-.drawer-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
+.drawer-stack { display: flex; flex-direction: column; gap: 12px; }
+.drawer-tags { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.drawer-meta { margin-top: 14px; }
 .publish-msg { margin: 0 0 12px; line-height: 1.6; }
 .publish-actions { display: flex; flex-direction: column; gap: 8px; }
 .hint { color: var(--qz-text-muted); font-size: 13px; margin: 0 0 10px; }

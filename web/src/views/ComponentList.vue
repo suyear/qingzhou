@@ -135,52 +135,49 @@
       </div>
     </div>
 
-    <el-drawer v-model="detailVisible" :title="detailTitle" size="520px" destroy-on-close @closed="detailRow = null">
-      <div v-if="detailRow" class="detail">
-        <div class="detail-meta">
-          <el-tag size="small" :type="httpMethodTagType(detailRow.httpMethod)">{{ detailRow.httpMethod }}</el-tag>
-          <el-tag size="small" type="info">{{ categoryLabel(detailRow.category) }}</el-tag>
-          <el-tag size="small">{{ providerLabel(detailRow.provider) }}</el-tag>
-          <el-tag size="small" :type="detailRow.isPreset ? 'warning' : 'info'">{{ detailRow.isPreset ? '预置' : '自定义' }}</el-tag>
-        </div>
-        <p class="detail-line">
-          编码：
-          <el-button type="primary" link @click="onCopy(detailRow.componentCode, '已复制编码')">{{ detailRow.componentCode }}</el-button>
-        </p>
-        <p class="detail-line mono">{{ detailRow.urlTemplate }}</p>
-        <p v-if="authSummary(detailRow) || needsAccessToken(detailRow)" class="detail-line">
-          鉴权：
-          <el-tag size="small" type="warning">{{ needsAccessToken(detailRow) ? '企业微信 Token' : authSummary(detailRow) }}</el-tag>
-        </p>
-        <p class="detail-line muted">超时 {{ detailRow.timeoutMs }}ms · 重试 {{ detailRow.retryTimes }} 次</p>
-        <p v-if="detailRow.description" class="detail-desc">{{ detailRow.description }}</p>
-        <div v-if="detailQueryFields.length" class="schema-block">
-          <div class="schema-title">Query 入参</div>
-          <el-table :data="detailQueryFields" size="small" border>
-            <el-table-column prop="key" label="字段" width="120" />
-            <el-table-column prop="type" label="类型" width="90" />
-            <el-table-column label="必填" width="70">
-              <template #default="{ row }">{{ row.required ? '是' : '否' }}</template>
-            </el-table-column>
-            <el-table-column prop="description" label="说明" min-width="140" show-overflow-tooltip />
-          </el-table>
-        </div>
-        <div v-if="detailBodyFields.length" class="schema-block">
-          <div class="schema-title">Body 入参</div>
-          <el-table :data="detailBodyFields" size="small" border>
-            <el-table-column prop="key" label="字段" width="120" />
-            <el-table-column prop="type" label="类型" width="90" />
-            <el-table-column label="必填" width="70">
-              <template #default="{ row }">{{ row.required ? '是' : '否' }}</template>
-            </el-table-column>
-            <el-table-column prop="description" label="说明" min-width="140" show-overflow-tooltip />
-          </el-table>
-        </div>
-        <p v-if="!detailQueryFields.length && !detailBodyFields.length" class="muted">未声明入参 Schema</p>
-        <div class="detail-actions">
+    <el-drawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      size="560px"
+      class="qz-detail-drawer"
+      destroy-on-close
+      @closed="detailRow = null"
+    >
+      <div v-if="detailRow" class="detail-stack">
+        <DetailSection title="基本信息">
+          <div class="detail-meta">
+            <el-tag size="small" :type="httpMethodTagType(detailRow.httpMethod)">{{ detailRow.httpMethod }}</el-tag>
+            <el-tag size="small" type="info">{{ categoryLabel(detailRow.category) }}</el-tag>
+            <el-tag size="small">{{ providerLabel(detailRow.provider) }}</el-tag>
+            <el-tag size="small" :type="detailRow.isPreset ? 'warning' : 'info'">{{ detailRow.isPreset ? '预置' : '自定义' }}</el-tag>
+          </div>
+          <DetailCopyField label="编码" :value="detailRow.componentCode" copy-message="已复制编码" />
+          <DetailCodeBlock
+            class="detail-url"
+            title="接口地址"
+            :value="detailRow.urlTemplate"
+            copy-message="已复制地址"
+            max-height="120px"
+          />
+          <DetailMetaList class="detail-meta-list" :items="detailMetaItems" />
+        </DetailSection>
+        <DetailSchemaTable
+          v-if="detailQueryFields.length"
+          title="Query 入参"
+          :fields="detailQueryFields"
+        />
+        <DetailSchemaTable
+          v-if="detailBodyFields.length"
+          title="Body 入参"
+          :fields="detailBodyFields"
+        />
+        <DetailSection v-if="!detailQueryFields.length && !detailBodyFields.length" title="入参 Schema">
+          <DetailEmpty text="未声明入参 Schema" />
+        </DetailSection>
+        <DetailActions>
           <el-button type="primary" @click="openTest(detailRow)">试连通</el-button>
           <el-button @click="openEdit(detailRow)">编辑</el-button>
-        </div>
+        </DetailActions>
       </div>
     </el-drawer>
 
@@ -342,19 +339,21 @@
           <span class="muted">该组件没有声明入参，将按 URL 直接请求</span>
         </el-form-item>
       </el-form>
-      <div v-if="testResult" class="test-result" :class="testResult.success ? 'ok' : 'fail'">
-        <div class="test-head">
-          <div class="test-line">{{ testResult.success ? '连通成功' : '连通失败' }} · {{ testResult.message }}</div>
-          <el-button v-if="testResult.responseBody" type="primary" link @click="onCopy(testResult.responseBody, '已复制响应')">复制响应</el-button>
-        </div>
-        <div class="test-line muted">
-          {{ testResult.requestMethod }} {{ testResult.requestUrl || '-' }}
-          <span v-if="testResult.httpStatus"> · HTTP {{ testResult.httpStatus }}</span>
-          <span v-if="testResult.durationMs != null"> · {{ testResult.durationMs }}ms</span>
-          <span v-if="testResult.wecomErrcode != null"> · errcode {{ testResult.wecomErrcode }}</span>
-        </div>
-        <pre v-if="testResult.responseBody">{{ formatJson(testResult.responseBody) }}</pre>
-      </div>
+      <DetailResultBanner
+        v-if="testResult"
+        :ok="testResult.success"
+        :title="testResult.success ? '连通成功' : '连通失败'"
+        :message="testResult.message"
+        :meta="testResultMeta"
+      >
+        <DetailCodeBlock
+          v-if="testResult.responseBody"
+          title="响应"
+          :value="testResult.responseBody"
+          copy-message="已复制响应"
+          max-height="260px"
+        />
+      </DetailResultBanner>
       <template #footer>
         <el-button @click="testVisible = false">关闭</el-button>
         <el-button type="primary" :loading="testing" @click="runTest">发起请求</el-button>
@@ -372,6 +371,14 @@ import PageState from '@/components/PageState.vue'
 import ComponentAuthPanel from '@/components/ComponentAuthPanel.vue'
 import ComponentCreateWizard from '@/components/ComponentCreateWizard.vue'
 import ComponentCurlImport from '@/components/ComponentCurlImport.vue'
+import DetailSection from '@/components/detail/DetailSection.vue'
+import DetailCopyField from '@/components/detail/DetailCopyField.vue'
+import DetailCodeBlock from '@/components/detail/DetailCodeBlock.vue'
+import DetailMetaList from '@/components/detail/DetailMetaList.vue'
+import DetailSchemaTable from '@/components/detail/DetailSchemaTable.vue'
+import DetailEmpty from '@/components/detail/DetailEmpty.vue'
+import DetailActions from '@/components/detail/DetailActions.vue'
+import DetailResultBanner from '@/components/detail/DetailResultBanner.vue'
 import { applyCurlImport } from '@/utils/parseCurl'
 import {
   authSummary,
@@ -381,7 +388,7 @@ import {
   validateAuthState,
 } from '@/utils/componentAuth'
 import { askConfirm } from '@/utils/confirm'
-import { copyText, formatJson } from '@/utils/format'
+import { copyText } from '@/utils/format'
 import { createComponent, deleteComponent, pageComponents, testComponent, updateComponent } from '@/api/component'
 import { pageCredentials } from '@/api/credential'
 import { networkErrorMessage } from '@/api/http'
@@ -474,6 +481,26 @@ const testTitle = computed(() => (testRow.value ? `试连通 · ${testRow.value.
 const detailTitle = computed(() => (detailRow.value ? `组件详情 · ${detailRow.value.componentName}` : '组件详情'))
 const detailQueryFields = computed(() => (detailRow.value ? schemaToFields(detailRow.value.querySchema) : []))
 const detailBodyFields = computed(() => (detailRow.value ? schemaToFields(detailRow.value.bodySchema) : []))
+const detailMetaItems = computed(() => {
+  const row = detailRow.value
+  if (!row) return []
+  const auth = needsAccessToken(row) ? '企业微信 Token' : authSummary(row)
+  return [
+    { label: '鉴权', value: auth, hidden: !auth },
+    { label: '超时', value: `${row.timeoutMs}ms` },
+    { label: '重试', value: `${row.retryTimes} 次` },
+    { label: '说明', value: row.description, hidden: !row.description },
+  ]
+})
+const testResultMeta = computed(() => {
+  const result = testResult.value
+  if (!result) return ''
+  const parts = [`${result.requestMethod || ''} ${result.requestUrl || '-'}`]
+  if (result.httpStatus) parts.push(`HTTP ${result.httpStatus}`)
+  if (result.durationMs != null) parts.push(`${result.durationMs}ms`)
+  if (result.wecomErrcode != null) parts.push(`errcode ${result.wecomErrcode}`)
+  return parts.filter(Boolean).join(' · ')
+})
 const emptyText = computed(() => {
   if (keyword.value || category.value || presetFilter.value || httpMethod.value) {
     return '没有匹配的组件'
@@ -908,25 +935,10 @@ onMounted(() => {
   font-weight: 600;
   font-size: 13px;
 }
-.detail-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.detail-line { margin: 0 0 8px; word-break: break-all; }
-.detail-desc { margin: 12px 0; color: var(--qz-text); line-height: 1.6; }
-.schema-block { margin: 16px 0; }
-.schema-title { font-weight: 600; margin-bottom: 8px; font-size: 13px; }
-.detail-actions { margin-top: 20px; display: flex; gap: 8px; }
-.test-result { margin-top: 8px; padding: 12px; border-radius: 8px; background: #f8fafc; }
-.test-result.ok { border: 1px solid #bbf7d0; background: #f0fdf4; }
-.test-result.fail { border: 1px solid #fecaca; background: #fef2f2; }
-.test-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.test-line { margin-bottom: 6px; word-break: break-all; }
-.test-result pre {
-  margin: 8px 0 0;
-  max-height: 280px;
-  overflow: auto;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
+.detail-stack { display: flex; flex-direction: column; gap: 12px; }
+.detail-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.detail-url { margin-top: 14px; }
+.detail-meta-list { margin-top: 14px; }
 @media (max-width: 900px) {
   .param-row {
     grid-template-columns: 1fr 1fr;

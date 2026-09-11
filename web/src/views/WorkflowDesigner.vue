@@ -148,7 +148,7 @@
       </template>
       <el-collapse v-if="runtimeFields.length" class="json-advanced">
         <el-collapse-item title="高级：JSON 入参" name="json">
-          <el-input v-model="tryRunInput" type="textarea" :rows="6" placeholder="{}" />
+          <el-input v-model="tryRunInput" type="textarea" :rows="6" placeholder="{}" class="json-input" />
         </el-collapse-item>
       </el-collapse>
       <template #footer>
@@ -171,13 +171,16 @@
         <el-button @click="publishSuccessVisible = false">继续编排</el-button>
       </template>
     </el-dialog>
-    <el-drawer v-model="logVisible" title="试运行结果" size="640px">
+    <el-drawer v-model="logVisible" title="试运行结果" size="80%" class="qz-detail-drawer">
       <ExecutionLogView
         v-if="runResult"
         :instance="runResult.instance"
         :logs="runResult.logs"
         :execution-link="executionLink"
+        :workflow-name="form.workflowName"
+        :workflow-id="route.params.id"
       />
+      <DetailEmpty v-else text="暂无试运行结果" />
     </el-drawer>
   </div>
 </template>
@@ -213,6 +216,7 @@ import WorkflowStepEditor from '@/components/designer/WorkflowStepEditor.vue'
 import { NODE_SHAPE, registerComponentNode } from '@/components/designer/registerNodes'
 import { formatTime, workflowStatusLabel } from '@/utils/format'
 import ExecutionLogView from '@/components/ExecutionLogView.vue'
+import DetailEmpty from '@/components/detail/DetailEmpty.vue'
 
 registerComponentNode()
 const TeleportContainer = getTeleport()
@@ -1318,6 +1322,11 @@ onBeforeUnmount(() => {
 .publish-msg { margin: 0 0 12px; line-height: 1.6; }
 .publish-actions { display: flex; flex-direction: column; gap: 8px; }
 .json-advanced { margin-top: 12px; }
+.json-input :deep(textarea) {
+  font-family: var(--qz-code-font);
+  font-size: 12px;
+  line-height: 1.65;
+}
 .run-head {
   display: flex;
   justify-content: space-between;

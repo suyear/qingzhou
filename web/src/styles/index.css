@@ -29,6 +29,11 @@
   --qz-table-head: #f8fafc;
   --qz-table-stripe: #fafbfc;
   --qz-table-hover: #f1f6ff;
+  --qz-code-font: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --qz-code-bg: #f8fafc;
+  --qz-code-ink: #0b1220;
+  --qz-code-ink-fg: #e2e8f0;
+  --qz-code-ink-muted: #94a3b8;
 
   --el-color-primary: #2563eb;
   --el-color-primary-light-3: #60a5fa;
@@ -407,6 +412,27 @@ body,
   padding: 16px 20px 24px;
 }
 
+.qz-detail-drawer.el-drawer {
+  max-width: 840px;
+}
+
+.qz-detail-drawer .el-drawer__body {
+  background: var(--qz-fill);
+}
+
+.qz-detail-drawer .el-drawer__footer {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--qz-border);
+  background: #fff;
+}
+
+@media (max-width: 720px) {
+  .qz-detail-drawer.el-drawer {
+    width: 100% !important;
+    max-width: none;
+  }
+}
+
 .el-form-item__label {
   font-weight: 500;
   color: var(--qz-text-secondary);
@@ -438,6 +464,59 @@ body,
 
 .el-message-box {
   border-radius: 12px;
+}
+
+/* ---------- detail expand / code / collapse ---------- */
+.el-collapse {
+  --el-collapse-header-bg-color: var(--qz-fill);
+  --el-collapse-header-text-color: var(--qz-text-secondary);
+  --el-collapse-content-bg-color: #fff;
+  border: 1px solid var(--qz-border);
+  border-radius: var(--qz-radius-sm);
+  overflow: hidden;
+}
+
+.el-collapse-item__header {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.el-collapse-item__wrap {
+  border-top: 1px solid var(--qz-border);
+}
+
+.el-collapse-item__content {
+  padding: 12px;
+}
+
+.el-timeline-item__tail {
+  border-left: 2px solid var(--qz-border);
+}
+
+.el-timeline-item__node {
+  box-shadow: 0 0 0 3px #fff;
+}
+
+.el-descriptions {
+  --el-descriptions-table-border: var(--qz-border);
+  --el-descriptions-item-bordered-label-background: var(--qz-fill);
+}
+
+.el-descriptions__label {
+  color: var(--qz-text-muted);
+  font-weight: 500;
+}
+
+.el-descriptions__content {
+  color: var(--qz-text);
+}
+
+.qz-mono {
+  font-family: var(--qz-code-font);
+  font-size: 12px;
 }
 
 /* ---------- stats ---------- */

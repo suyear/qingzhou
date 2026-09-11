@@ -95,6 +95,7 @@
         <li v-for="(time, index) in previewTimes" :key="index">{{ formatTime(time) }}</li>
       </ul>
       <p v-else-if="previewLoaded" class="hint">暂无未来触发时间，请检查规则配置</p>
+      <p v-else class="hint">保存前可先刷新，查看接下来几次触发时间</p>
     </div>
   </div>
 </template>
@@ -274,9 +275,10 @@ watch(
 }
 
 .preview-box {
-  padding: 12px;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--qz-border);
+  border-radius: var(--qz-radius-sm);
+  background: var(--qz-fill);
 }
 
 .preview-head {

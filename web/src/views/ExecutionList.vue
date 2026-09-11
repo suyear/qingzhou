@@ -97,24 +97,34 @@
     </div>
     </div>
 
-    <el-drawer v-model="detailVisible" title="执行详情" size="720px" destroy-on-close @closed="resetDetail">
-      <div v-loading="detailLoading">
+    <el-drawer
+      v-model="detailVisible"
+      title="执行详情"
+      size="80%"
+      class="qz-detail-drawer"
+      destroy-on-close
+      @closed="resetDetail"
+    >
+      <div v-loading="detailLoading" class="detail-shell">
         <ExecutionLogView
           v-if="detail"
           :instance="detail.instance"
           :logs="detail.logs"
           :workflow-id="detailWorkflowId"
           :workflow-name="detailWorkflowName"
-        />
-        <el-button
-          v-if="detail?.instance"
-          type="primary"
-          :disabled="detail.instance.status === 'RUNNING'"
-          :loading="replaying"
-          @click="onReplay(detail.instance)"
         >
-          重放此单
-        </el-button>
+          <template #actions>
+            <el-button
+              type="primary"
+              :disabled="detail.instance.status === 'RUNNING'"
+              :loading="replaying"
+              @click="onReplay(detail.instance)"
+            >
+              重放此单
+            </el-button>
+          </template>
+        </ExecutionLogView>
+        <DetailEmpty v-else-if="!detailLoading" text="未能加载执行详情" />
       </div>
     </el-drawer>
   </div>
@@ -128,6 +138,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import ExecutionLogView from '@/components/ExecutionLogView.vue'
+import DetailEmpty from '@/components/detail/DetailEmpty.vue'
 import { askConfirm } from '@/utils/confirm'
 import { getWorkflow, pageWorkflows } from '@/api/workflow'
 import { getExecution, pageExecutions, replayExecution } from '@/api/execution'
@@ -337,4 +348,5 @@ onMounted(async () => {
 <style scoped>
 .sub { color: #94a3b8; font-size: 12px; }
 .err { color: #dc2626; font-size: 12px; }
+.detail-shell { min-height: 160px; }
 </style>

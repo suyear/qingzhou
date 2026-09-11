@@ -17,7 +17,7 @@
 
     <section class="doc-section">
       <h3>调用地址</h3>
-      <pre class="code-block">POST {baseUrl}/openapi/v1/workflows/{workflowCode}/execute</pre>
+      <DetailCodeBlock title="接口" value="POST {baseUrl}/openapi/v1/workflows/{workflowCode}/execute" tone="ink" max-height="120px" />
       <p class="tip">控制台「调用助手」生成的 curl 已包含正确地址和签名头。生产环境请在服务端配置 <code>qingzhou.openapi.public-base-url</code>。</p>
     </section>
 
@@ -31,8 +31,13 @@
 
     <section class="doc-section">
       <h3>签名算法</h3>
-      <pre class="code-block">stringToSign = MD5(body) + timestamp + nonce + secret
-signature    = Hex(HMAC-SHA256(key=secret, data=stringToSign)).toLowerCase()</pre>
+      <DetailCodeBlock
+        title="算法"
+        :value="signSample"
+        copy-message="已复制签名算法"
+        tone="ink"
+        max-height="140px"
+      />
       <ul class="bullets">
         <li><code>body</code> 必须是<strong>紧凑 JSON</strong>（无多余空格），空对象写 <code>{}</code></li>
         <li><code>timestamp</code> 为毫秒时间戳，允许 ±5 分钟误差</li>
@@ -44,16 +49,13 @@ signature    = Hex(HMAC-SHA256(key=secret, data=stringToSign)).toLowerCase()</pr
       <h3>代码示例</h3>
       <el-tabs v-model="sampleTab" class="sample-tabs">
         <el-tab-pane label="curl" name="curl">
-          <pre class="code-block">{{ curlSample }}</pre>
-          <el-button size="small" @click="copy(curlSample)">复制</el-button>
+          <DetailCodeBlock title="curl" :value="curlSample" copy-message="已复制" tone="ink" max-height="280px" />
         </el-tab-pane>
         <el-tab-pane label="Python" name="python">
-          <pre class="code-block">{{ pythonSample }}</pre>
-          <el-button size="small" @click="copy(pythonSample)">复制</el-button>
+          <DetailCodeBlock title="Python" :value="pythonSample" copy-message="已复制" tone="ink" max-height="360px" />
         </el-tab-pane>
         <el-tab-pane label="Node.js" name="node">
-          <pre class="code-block">{{ nodeSample }}</pre>
-          <el-button size="small" @click="copy(nodeSample)">复制</el-button>
+          <DetailCodeBlock title="Node.js" :value="nodeSample" copy-message="已复制" tone="ink" max-height="360px" />
         </el-tab-pane>
       </el-tabs>
     </section>
@@ -70,8 +72,7 @@ signature    = Hex(HMAC-SHA256(key=secret, data=stringToSign)).toLowerCase()</pr
 
 <script setup>
 import { ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { copyText } from '@/utils/format'
+import DetailCodeBlock from '@/components/detail/DetailCodeBlock.vue'
 
 const sampleTab = ref('curl')
 
@@ -92,6 +93,9 @@ const errors = [
   { code: 'IP 不在白名单', fix: '在应用设置中调整 IP 白名单或清空不限制' },
   { code: '超过 QPS 限制', fix: '调低调用频率或提高应用 QPS 上限' },
 ]
+
+const signSample = `stringToSign = MD5(body) + timestamp + nonce + secret
+signature    = Hex(HMAC-SHA256(key=secret, data=stringToSign)).toLowerCase()`
 
 const curlSample = `curl -X POST 'https://your-host/openapi/v1/workflows/demo_flow/execute' \\
   -H 'Content-Type: application/json' \\
@@ -143,10 +147,6 @@ await fetch('https://your-host/openapi/v1/workflows/demo_flow/execute', {
   body,
 })`
 
-async function copy(text) {
-  await copyText(text)
-  ElMessage.success('已复制')
-}
 </script>
 
 <style scoped>
@@ -185,18 +185,6 @@ async function copy(text) {
   font-size: 12px;
   color: var(--qz-text-muted);
   line-height: 1.5;
-}
-.code-block {
-  margin: 0;
-  padding: 12px;
-  background: #0f172a;
-  color: #e2e8f0;
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1.5;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
 }
 .doc-table { margin-top: 8px; }
 .sample-tabs :deep(.el-tabs__header) { margin-bottom: 10px; }
