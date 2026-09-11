@@ -1,4 +1,4 @@
-import { parseJson } from './schema'
+import { parseJson } from './schema.js'
 
 const META_KEYS = new Set([
   'componentId', 'componentCode', 'componentName', 'httpMethod',

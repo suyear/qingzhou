@@ -1,5 +1,5 @@
-import { fieldLabel } from './workflowBinding'
-import { parseJson } from './schema'
+import { fieldLabel } from './workflowBinding.js'
+import { parseJson } from './schema.js'
 
 export function emptyKvRow() {
   return { key: '', value: '' }
