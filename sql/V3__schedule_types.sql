@@ -1,3 +1,5 @@
+-- 旧库升级脚本：给 qz_schedule_job 增加调度类型与触发入参。
+-- 仅在「当前表还没有这些列」时执行。新库若已跑过含这些列的 V1，请跳过本文件。
 -- 扩展调度任务：支持固定间隔 / 每天 / 每周 / 一次性，以及触发入参
 ALTER TABLE `qz_schedule_job`
   ADD COLUMN `schedule_type`   VARCHAR(16)  NOT NULL DEFAULT 'CRON' COMMENT 'CRON|INTERVAL|DAILY|WEEKLY|ONCE' AFTER `job_name`,

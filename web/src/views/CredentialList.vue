@@ -9,8 +9,10 @@
         @keyup.enter="load"
         @clear="load"
       />
+      <el-button @click="load">查询</el-button>
       <el-button type="primary" @click="openCreate">新建凭证</el-button>
     </PageHeader>
+    <PageState :error="loadError" @retry="load" />
     <el-alert class="mode-alert" type="info" :closable="false" show-icon>
       <template #title>两种凭证怎么选？</template>
       <div class="cred-guide">
@@ -31,7 +33,7 @@
       <el-table-column label="作用域" min-width="160">
         <template #default="{ row }">
           <span v-if="row.scope === 'WORKFLOW'">{{ workflowTitle(row.workflowId) }}</span>
-          <span v-else>全局</span>
+          <span v-else>全局共享</span>
         </template>
       </el-table-column>
       <el-table-column label="CorpId" min-width="160" show-overflow-tooltip>
@@ -77,7 +79,7 @@
         </template>
       </el-table-column>
       <template #empty>
-        <el-empty v-if="!loading" description="还没有凭证。企微填 CorpId+Secret；自定义 HTTP 只存密钥即可。">
+        <el-empty v-if="!loading && !loadError" :description="emptyText">
           <el-button type="primary" @click="openCreate">新建凭证</el-button>
         </el-empty>
       </template>
@@ -94,7 +96,7 @@
     </div>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑凭证' : '新建凭证'" width="520px">
+    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑凭证' : '新建凭证'" width="520px" destroy-on-close>
       <el-form :model="form" label-width="110px">
         <el-form-item label="名称" required>
           <el-input v-model="form.credentialName" />
@@ -149,6 +151,16 @@
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="testVisible" title="凭证连通结果" width="480px">
+      <div v-if="testResult" class="test-result" :class="testResult.success ? 'ok' : 'fail'">
+        <div class="test-line">{{ testResult.success ? '连通成功' : '连通失败' }}</div>
+        <p>{{ testResult.message }}</p>
+      </div>
+      <template #footer>
+        <el-button @click="testVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -156,8 +168,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
+import PageState from '@/components/PageState.vue'
 import { askConfirm } from '@/utils/confirm'
 import { pageWorkflows } from '@/api/workflow'
+import { networkErrorMessage } from '@/api/http'
 import {
   createCredential,
   deleteCredential,
@@ -174,6 +188,9 @@ const total = ref(0)
 const current = ref(1)
 const size = ref(10)
 const loading = ref(false)
+const loadError = ref('')
+const testVisible = ref(false)
+const testResult = ref(null)
 const workflows = ref([])
 const workflowMap = computed(() => {
   const map = {}
@@ -197,6 +214,12 @@ const secretLabel = computed(() => {
   const base = form.credentialType === 'CUSTOM' ? '密钥 / Token' : 'Secret'
   return form.id ? `${base}（留空不改）` : base
 })
+
+const emptyText = computed(() => (
+  keyword.value
+    ? '没有匹配的凭证'
+    : '还没有凭证。企微填 CorpId+Secret；自定义 HTTP 只存密钥即可。'
+))
 const dialogVisible = ref(false)
 const saving = ref(false)
 const form = reactive({
@@ -213,10 +236,14 @@ const form = reactive({
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await pageCredentials({ current: current.value, size: size.value, keyword: keyword.value })
     records.value = res.data?.records || []
     total.value = Number(res.data?.total || 0)
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+    records.value = []
   } finally {
     loading.value = false
   }
@@ -307,6 +334,8 @@ async function onTest(row) {
   row._testing = true
   try {
     const res = await testCredential(row.id)
+    testResult.value = res.data || { success: false, message: '连通失败' }
+    testVisible.value = true
     if (res.data?.success) {
       ElMessage.success(res.data.message)
     } else {
@@ -357,6 +386,22 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--qz-text-muted);
   line-height: 1.45;
+}
+.test-result {
+  padding: 12px;
+  border-radius: 8px;
+}
+.test-result.ok {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+}
+.test-result.fail {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+}
+.test-line {
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 </style>
 

@@ -1,7 +1,7 @@
 <template>
   <div>
     <PageHeader title="运行记录" desc="试运行、调度、开放调用和重放都会落在这里。">
-      <el-select v-model="workflowId" placeholder="全部工作流" clearable class="search-input">
+      <el-select v-model="workflowId" placeholder="全部工作流" clearable class="search-input" @change="onFilterChange">
         <el-option
           v-for="wf in workflows"
           :key="wf.id"
@@ -9,14 +9,14 @@
           :value="wf.id"
         />
       </el-select>
-      <el-select v-model="triggerType" placeholder="触发方式" clearable style="width: 140px">
+      <el-select v-model="triggerType" placeholder="触发方式" clearable style="width: 140px" @change="onFilterChange">
         <el-option label="试运行" value="TRY_RUN" />
         <el-option label="调度" value="SCHEDULE" />
         <el-option label="开放调用" value="OPENAPI" />
         <el-option label="重放" value="REPLAY" />
         <el-option label="手动" value="MANUAL" />
       </el-select>
-      <el-select v-model="status" placeholder="状态" clearable style="width: 120px">
+      <el-select v-model="status" placeholder="状态" clearable style="width: 120px" @change="onFilterChange">
         <el-option label="成功" value="SUCCESS" />
         <el-option label="失败" value="FAILED" />
         <el-option label="运行中" value="RUNNING" />
@@ -29,9 +29,15 @@
         @keyup.enter="reload"
         @clear="reload"
       />
+      <el-button @click="reload">查询</el-button>
     </PageHeader>
+    <PageState :error="loadError" @retry="load" />
+    <div v-if="triggerAppId" class="qz-filter-chip">
+      仅看待定开放应用的调用
+      <el-button type="primary" link @click="clearAppFilter">清除</el-button>
+    </div>
     <div class="qz-panel">
-    <el-table class="qz-table" :data="records" v-loading="loading" stripe>
+    <el-table class="qz-table" :data="records" v-loading="loading" stripe highlight-current-row @row-click="openDetail">
       <el-table-column label="单号" min-width="200">
         <template #default="{ row }">
           <el-button type="primary" link @click="onCopy(row.executionNo)">{{ row.executionNo }}</el-button>
@@ -65,17 +71,17 @@
       </el-table-column>
       <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
-          <div class="qz-ops">
-            <el-button type="primary" link @click="openDetail(row)">详情</el-button>
-            <el-button type="primary" link :disabled="row.status === 'RUNNING'" :loading="row._replaying" @click="onReplay(row)">重放</el-button>
-          </div>
+            <div class="qz-ops" @click.stop>
+              <el-button type="primary" link @click="openDetail(row)">详情</el-button>
+              <el-button type="primary" link :disabled="row.status === 'RUNNING'" :loading="row._replaying" @click="onReplay(row)">重放</el-button>
+            </div>
         </template>
       </el-table-column>
-      <template #empty>
-        <el-empty v-if="!loading" description="还没有执行记录">
-          <el-button type="primary" @click="$router.push('/workflows')">去编排</el-button>
-        </el-empty>
-      </template>
+        <template #empty>
+          <el-empty v-if="!loading && !loadError" :description="emptyText">
+            <el-button type="primary" @click="$router.push('/workflows')">去编排</el-button>
+          </el-empty>
+        </template>
     </el-table>
     <div class="pager">
       <el-pagination
@@ -91,101 +97,22 @@
 
     <el-drawer v-model="detailVisible" title="执行详情" size="720px" destroy-on-close @closed="resetDetail">
       <div v-loading="detailLoading">
-        <div v-if="detail">
-          <p>
-            状态：
-            <el-tag size="small" :type="execStatusType(detail.instance?.status)">{{ execStatusLabel(detail.instance?.status) }}</el-tag>
-            单号：
-            <el-button type="primary" link @click="onCopy(detail.instance?.executionNo)">{{ detail.instance?.executionNo }}</el-button>
-          </p>
-          <p>
-            工作流：
-            <el-button
-              v-if="detailWorkflowId"
-              type="primary"
-              link
-              @click="$router.push(`/designer/${detailWorkflowId}`)"
-            >
-              {{ detailWorkflowName }}
-            </el-button>
-            <span v-else>{{ detailWorkflowName }}</span>
-          </p>
-          <p>触发：{{ triggerLabel(detail.instance?.triggerType) }}　快照：{{ detail.instance?.snapshotId || '草稿' }}</p>
-          <p v-if="detail.instance?.traceId">
-            Trace：
-            <el-button type="primary" link @click="onCopy(detail.instance.traceId, '已复制 Trace')">{{ detail.instance.traceId }}</el-button>
-          </p>
-          <p v-if="detail.instance?.errorMsg" class="err">{{ detail.instance.errorMsg }}</p>
-          <div class="io-compare">
-            <div class="io-col">
-              <div class="io-head">
-                <span>入参</span>
-                <el-button type="primary" link @click="onCopy(formatJson(detail.instance?.inputParams), '已复制入参')">复制</el-button>
-              </div>
-              <pre class="payload">{{ formatJson(detail.instance?.inputParams) }}</pre>
-            </div>
-            <div class="io-col">
-              <div class="io-head">
-                <span>出参</span>
-                <el-button
-                  v-if="detail.instance?.outputResult"
-                  type="primary"
-                  link
-                  @click="onCopy(formatJson(detail.instance.outputResult), '已复制出参')"
-                >
-                  复制
-                </el-button>
-              </div>
-              <pre class="payload">{{ detail.instance?.outputResult ? formatJson(detail.instance.outputResult) : '暂无出参' }}</pre>
-            </div>
-          </div>
-          <el-button type="primary" :disabled="detail.instance?.status === 'RUNNING'" :loading="replaying" @click="onReplay(detail.instance)">重放此单</el-button>
-          <el-timeline>
-            <el-timeline-item
-              v-for="item in detail.logs"
-              :key="item.id"
-              :timestamp="formatTime(item.startTime)"
-            >
-              <div class="log-title">
-                {{ item.nodeName }} {{ item.requestMethod }}
-                <el-tag size="small" :type="execStatusType(item.status)">{{ execStatusLabel(item.status) }}</el-tag>
-              </div>
-              <div class="log-sub">{{ item.requestUrl }}</div>
-              <div v-if="item.errorMsg" class="err">{{ item.errorMsg }}</div>
-              <div v-else>HTTP {{ item.responseStatus }}　耗时 {{ durationText(item.durationMs) }}　重试 {{ item.retryCount }}</div>
-              <div v-if="item.requestBody || item.responseBody" class="io-compare">
-                <div class="io-col">
-                  <div class="io-head">
-                    <span>请求</span>
-                    <el-button
-                      v-if="item.requestBody"
-                      type="primary"
-                      link
-                      @click="onCopy(formatJson(item.requestBody), '已复制请求')"
-                    >
-                      复制
-                    </el-button>
-                  </div>
-                  <pre class="payload">{{ item.requestBody ? formatJson(item.requestBody) : '—' }}</pre>
-                </div>
-                <div class="io-col">
-                  <div class="io-head">
-                    <span>响应</span>
-                    <el-button
-                      v-if="item.responseBody"
-                      type="primary"
-                      link
-                      @click="onCopy(formatJson(item.responseBody), '已复制响应')"
-                    >
-                      复制
-                    </el-button>
-                  </div>
-                  <pre class="payload">{{ item.responseBody ? formatJson(item.responseBody) : '—' }}</pre>
-                </div>
-              </div>
-            </el-timeline-item>
-          </el-timeline>
-        </div>
+        <ExecutionLogView
+          v-if="detail"
+          :instance="detail.instance"
+          :logs="detail.logs"
+          :workflow-id="detailWorkflowId"
+          :workflow-name="detailWorkflowName"
+        />
+        <el-button
+          v-if="detail?.instance"
+          type="primary"
+          :disabled="detail.instance.status === 'RUNNING'"
+          :loading="replaying"
+          @click="onReplay(detail.instance)"
+        >
+          重放此单
+        </el-button>
       </div>
     </el-drawer>
   </div>
@@ -196,10 +123,13 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
+import PageState from '@/components/PageState.vue'
+import ExecutionLogView from '@/components/ExecutionLogView.vue'
 import { askConfirm } from '@/utils/confirm'
 import { getWorkflow, pageWorkflows } from '@/api/workflow'
 import { getExecution, pageExecutions, replayExecution } from '@/api/execution'
-import { copyText, durationText, execStatusLabel, execStatusType, formatJson, formatTime, triggerLabel } from '@/utils/format'
+import { networkErrorMessage } from '@/api/http'
+import { copyText, durationText, execStatusLabel, execStatusType, formatTime, triggerLabel } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -209,6 +139,7 @@ const total = ref(0)
 const current = ref(1)
 const size = ref(10)
 const loading = ref(false)
+const loadError = ref('')
 const keyword = ref(route.query.keyword || '')
 const workflowId = ref(route.query.workflowId ? Number(route.query.workflowId) : null)
 const triggerType = ref(route.query.triggerType || '')
@@ -222,6 +153,12 @@ const replaying = ref(false)
 const syncingQuery = ref(false)
 const detailWorkflowId = computed(() => detail.value?.instance?.workflowId || detailMeta.value?.workflowId)
 const detailWorkflowName = computed(() => detailMeta.value?.workflowName || `工作流 #${detailWorkflowId.value || ''}`)
+const emptyText = computed(() => {
+  if (keyword.value || workflowId.value || triggerType.value || status.value || triggerAppId.value) {
+    return '没有匹配的执行记录'
+  }
+  return '还没有执行记录'
+})
 
 function applyQuery() {
   workflowId.value = route.query.workflowId ? Number(route.query.workflowId) : null
@@ -248,6 +185,7 @@ function syncQuery() {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await pageExecutions({
       current: current.value,
@@ -260,9 +198,23 @@ async function load() {
     })
     records.value = res.data?.records || []
     total.value = Number(res.data?.total || 0)
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+    records.value = []
   } finally {
     loading.value = false
   }
+}
+
+function onFilterChange() {
+  current.value = 1
+  syncQuery()
+  load()
+}
+
+function clearAppFilter() {
+  triggerAppId.value = null
+  onFilterChange()
 }
 
 function reload() {
@@ -364,59 +316,22 @@ watch(
   },
 )
 
-watch([workflowId, triggerType, status], () => {
-  if (syncingQuery.value) {
-    return
-  }
-  current.value = 1
-  syncQuery()
-  load()
-})
-
 onMounted(async () => {
   applyQuery()
   loading.value = true
-  const [wfRes] = await Promise.all([
-    pageWorkflows({ current: 1, size: 100 }),
-    load(),
-  ])
-  workflows.value = wfRes.data?.records || []
+  try {
+    const [wfRes] = await Promise.all([
+      pageWorkflows({ current: 1, size: 100 }),
+      load(),
+    ])
+    workflows.value = wfRes.data?.records || []
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+  }
 })
 </script>
 
 <style scoped>
 .sub { color: #94a3b8; font-size: 12px; }
-.log-title { font-weight: 600; }
-.log-sub { color: #64748b; font-size: 12px; word-break: break-all; }
 .err { color: #dc2626; font-size: 12px; }
-.input-block { margin: 12px 0 16px; }
-.io-compare {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin: 10px 0 16px;
-}
-.io-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.payload {
-  margin: 0;
-  padding: 8px;
-  max-height: 220px;
-  overflow: auto;
-  background: #f8fafc;
-  border: 1px solid var(--qz-border, #e8eef5);
-  border-radius: 6px;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-@media (max-width: 720px) {
-  .io-compare { grid-template-columns: 1fr; }
-}
 </style>

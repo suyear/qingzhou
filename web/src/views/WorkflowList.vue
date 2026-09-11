@@ -14,8 +14,11 @@
         @keyup.enter="reload"
         @clear="reload"
       />
+      <el-button @click="reload">查询</el-button>
       <el-button type="primary" @click="goCreate">新建工作流</el-button>
     </PageHeader>
+
+    <PageState :error="loadError" @retry="boot" />
 
     <div class="stat-grid">
       <button type="button" class="stat-card" :class="{ active: statusFilter === '' }" @click="filterByStatus('')">
@@ -143,7 +146,7 @@
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty v-if="!loading" :description="emptyText">
+          <el-empty v-if="!loading && !loadError" :description="emptyText">
             <el-button type="primary" @click="goCreate">新建工作流</el-button>
             <el-button @click="$router.push('/components')">先接入接口组件</el-button>
           </el-empty>
@@ -222,6 +225,8 @@ import PageHeader from '@/components/PageHeader.vue'
 import { askConfirm } from '@/utils/confirm'
 import { copyText, formatTime, workflowStatusLabel, workflowStatusType } from '@/utils/format'
 import { disableWorkflow, pageWorkflows, publishWorkflow } from '@/api/workflow'
+import { networkErrorMessage } from '@/api/http'
+import PageState from '@/components/PageState.vue'
 
 const GUIDE_KEY = 'qz-workflow-guide-dismissed'
 
@@ -231,6 +236,7 @@ const showGuide = ref(localStorage.getItem(GUIDE_KEY) !== '1')
 const records = ref([])
 const statRecords = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const keyword = ref('')
 const statusFilter = ref('')
 const total = ref(0)
@@ -280,6 +286,7 @@ async function loadStats() {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await pageWorkflows({
       current: current.value,
@@ -289,6 +296,9 @@ async function load() {
     })
     records.value = res.data?.records || []
     total.value = Number(res.data?.total || 0)
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+    records.value = []
   } finally {
     loading.value = false
   }
@@ -394,8 +404,17 @@ watch(
 
 onMounted(async () => {
   applyQuery()
-  await Promise.all([load(), loadStats()])
+  await boot()
 })
+
+async function boot() {
+  loadError.value = ''
+  try {
+    await Promise.all([load(), loadStats()])
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+  }
+}
 </script>
 
 <style scoped>

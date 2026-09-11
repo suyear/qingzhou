@@ -25,7 +25,7 @@ export function stopScheduleJob(id) {
 }
 
 export function triggerScheduleJob(id) {
-  return http.post(`/api/schedule/jobs/${id}/trigger`)
+  return http.post(`/api/schedule/jobs/${id}/trigger`, null, { timeout: 60000 })
 }
 
 export function deleteScheduleJob(id) {

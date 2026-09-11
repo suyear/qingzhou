@@ -47,6 +47,15 @@
         </el-menu>
       </el-aside>
       <el-main :class="route.meta.full ? 'qz-main-full' : 'qz-main'">
+        <el-alert
+          v-if="backendUnreachable && !route.meta.full"
+          class="backend-alert"
+          type="error"
+          show-icon
+          :closable="false"
+          title="无法连接后端服务"
+          description="请确认已启动 server（默认 http://127.0.0.1:18080）。前端开发服务会把 /api 代理到该地址。"
+        />
         <router-view />
       </el-main>
     </el-container>
@@ -57,6 +66,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Connection, Grid, HomeFilled, Key, List, Share, Timer } from '@element-plus/icons-vue'
+import { backendUnreachable } from '@/api/http'
 
 const TITLES = {
   '/': '工作台',
@@ -99,6 +109,9 @@ const activeMenu = computed(() => {
 .qz-body {
   flex: 1;
   min-height: 0;
+}
+.backend-alert {
+  margin-bottom: 14px;
 }
 .nav-group {
   padding: 14px 20px 6px;

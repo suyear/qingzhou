@@ -10,6 +10,7 @@
           @keyup.enter="load"
           @clear="load"
         />
+        <el-button @click="load">查询</el-button>
         <el-button type="primary" @click="openCreate">新建应用</el-button>
       </template>
       <el-button v-else text type="primary" @click="pageTab = 'apps'">返回应用管理</el-button>
@@ -25,6 +26,8 @@
         </button>
       </div>
     </div>
+
+    <PageState v-if="pageTab === 'apps'" :error="loadError" @retry="load" />
 
     <template v-if="pageTab === 'apps'">
       <div class="stat-grid">
@@ -146,7 +149,7 @@
             </template>
           </el-table-column>
           <template #empty>
-            <el-empty v-if="!loading" description="还没有开放应用">
+            <el-empty v-if="!loading && !loadError" description="还没有开放应用">
               <p class="empty-hint">三步即可对外提供 API：发布工作流 → 创建应用 → 授权试调</p>
               <el-button type="primary" @click="openCreate">新建应用</el-button>
               <el-button @click="pageTab = 'docs'">先看接入文档</el-button>
@@ -370,6 +373,7 @@
               <ScheduleTriggerInput
                 ref="invokeInputRef"
                 v-model="invokeInputData"
+                compact
                 :input-schema="selectedInvokeWorkflow?.inputSchema"
               />
             </el-form-item>
@@ -425,12 +429,14 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
+import PageState from '@/components/PageState.vue'
 import OpenApiDocsPanel from '@/components/OpenApiDocsPanel.vue'
 import ScheduleTriggerInput from '@/components/schedule/ScheduleTriggerInput.vue'
 import { askConfirm } from '@/utils/confirm'
 import { copyText, formatTime } from '@/utils/format'
 import { annotateCurlWithFields, examplePayloadFromSchema, schemaFieldGuide } from '@/utils/triggerInput'
 import { pageWorkflows } from '@/api/workflow'
+import { networkErrorMessage } from '@/api/http'
 import {
   bindOpenapiWorkflows,
   createOpenapiApp,
@@ -451,6 +457,7 @@ const showGuide = ref(localStorage.getItem(GUIDE_KEY) !== '1')
 const keyword = ref('')
 const records = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const publishedWorkflows = ref([])
 const createVisible = ref(false)
 const creating = ref(false)
@@ -518,7 +525,6 @@ const invokeOk = computed(() => invokeResult.value?.response?.code === 0)
 watch(secretVisible, (open) => {
   if (!open) secretConfirmed.value = false
 })
-
 watch(
   () => invokeForm.workflowCode,
   () => {
@@ -539,9 +545,13 @@ function dismissGuide() {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await pageOpenapiApps({ current: 1, size: 50, keyword: keyword.value })
     records.value = res.data?.records || []
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+    records.value = []
   } finally {
     loading.value = false
   }

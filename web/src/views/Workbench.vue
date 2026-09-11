@@ -1,30 +1,43 @@
 <template>
   <div v-loading="loading">
     <PageHeader title="工作台" desc="从编排、调度到开放调用的总览。先配组件和凭证，再画工作流。" />
+    <PageState :error="loadError" @retry="load" />
     <div class="stat-grid">
       <button class="stat-card" @click="$router.push('/components')">
         <div class="stat-label">接口组件</div>
-        <div class="stat-num">{{ stats.components }}</div>
+        <div class="stat-num">{{ displayNum(stats.components) }}</div>
       </button>
       <button class="stat-card" @click="$router.push('/workflows')">
         <div class="stat-label">工作流</div>
-        <div class="stat-num">{{ stats.workflows }}</div>
+        <div class="stat-num">{{ displayNum(stats.workflows) }}</div>
       </button>
       <button class="stat-card" title="按最近执行记录估算" @click="$router.push('/executions')">
         <div class="stat-label">今日执行</div>
-        <div class="stat-num">{{ stats.today }}</div>
-        <div class="stat-hint">最近记录估算</div>
+        <div class="stat-num">{{ displayNum(stats.today) }}</div>
+        <div class="stat-hint">最近 100 条估算</div>
       </button>
       <button class="stat-card" @click="$router.push('/schedules')">
         <div class="stat-label">运行中的调度</div>
-        <div class="stat-num">{{ stats.runningJobs }}</div>
+        <div class="stat-num">{{ displayNum(stats.runningJobs) }}</div>
       </button>
     </div>
     <div class="quick">
-      <el-button type="primary" @click="$router.push('/designer')">新建编排</el-button>
+      <el-button type="primary" @click="$router.push('/components')">接入组件</el-button>
+      <el-button @click="$router.push('/designer')">新建编排</el-button>
       <el-button @click="$router.push('/credentials')">配凭证</el-button>
       <el-button @click="$router.push('/openapi')">开放平台</el-button>
     </div>
+    <el-alert
+      v-if="!loading && !loadError && !stats.components"
+      class="guide-alert"
+      type="info"
+      show-icon
+      :closable="false"
+      title="还没有接口组件"
+      description="建议先接入一个 HTTP 接口（或体验预置企微组件），再去设计器拖成工作流。"
+    >
+      <el-button type="primary" size="small" @click="$router.push('/components')">去接入</el-button>
+    </el-alert>
     <div class="qz-panel recent">
       <div class="recent-head">
         <h3>最近运行</h3>
@@ -55,7 +68,7 @@
           <template #default="{ row }">{{ formatTime(row.startTime) }}</template>
         </el-table-column>
       </el-table>
-      <el-empty v-else-if="!loading" description="还没有执行记录，去设计器试运行一条工作流">
+      <el-empty v-else-if="!loading && !loadError" description="还没有执行记录，去设计器试运行一条工作流">
         <el-button type="primary" @click="$router.push('/workflows')">去编排</el-button>
       </el-empty>
     </div>
@@ -66,21 +79,28 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
+import PageState from '@/components/PageState.vue'
 import { pageComponents } from '@/api/component'
 import { pageWorkflows } from '@/api/workflow'
 import { pageExecutions } from '@/api/execution'
 import { pageScheduleJobs } from '@/api/schedule'
+import { networkErrorMessage } from '@/api/http'
 import { execStatusLabel, execStatusType, formatTime, triggerLabel } from '@/utils/format'
 
 const router = useRouter()
 const loading = ref(false)
+const loadError = ref('')
 const recent = ref([])
 const stats = reactive({
-  components: 0,
-  workflows: 0,
-  today: 0,
-  runningJobs: 0,
+  components: null,
+  workflows: null,
+  today: null,
+  runningJobs: null,
 })
+
+function displayNum(value) {
+  return value == null ? '—' : value
+}
 
 function isToday(value) {
   if (!value) return false
@@ -92,8 +112,9 @@ function isToday(value) {
   return day === `${y}-${m}-${d}`
 }
 
-onMounted(async () => {
+async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const [comps, wfs, execs, jobs] = await Promise.all([
       pageComponents({ current: 1, size: 1 }),
@@ -107,10 +128,15 @@ onMounted(async () => {
     recent.value = execRecords.slice(0, 5)
     stats.today = execRecords.filter((item) => isToday(item.startTime || item.createTime)).length
     stats.runningJobs = (jobs.data?.records || []).filter((item) => item.status === 1).length
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+    recent.value = []
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 
 function goRecent(row) {
   router.push({ path: '/executions', query: { keyword: row.executionNo } })
@@ -155,6 +181,9 @@ function goRecent(row) {
 .quick {
   display: flex;
   gap: 8px;
+  margin-bottom: 16px;
+}
+.guide-alert {
   margin-bottom: 16px;
 }
 .recent-head {

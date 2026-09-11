@@ -25,5 +25,5 @@ export function disableCredential(id) {
 }
 
 export function testCredential(id) {
-  return http.post(`/api/credentials/${id}/test`)
+  return http.post(`/api/credentials/${id}/test`, null, { timeout: 30000 })
 }
