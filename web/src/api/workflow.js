@@ -17,7 +17,7 @@ export function updateWorkflow(id, payload) {
 }
 
 export function tryRunWorkflow(id, payload) {
-  return http.post(`/api/workflows/${id}/try-run`, payload)
+  return http.post(`/api/workflows/${id}/try-run`, payload, { timeout: 60000 })
 }
 
 export function publishWorkflow(id) {

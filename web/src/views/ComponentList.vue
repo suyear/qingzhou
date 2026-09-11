@@ -19,6 +19,7 @@
         @keyup.enter="reload"
         @clear="reload"
       />
+      <el-button @click="reload">查询</el-button>
       <el-dropdown split-button type="primary" @click="openCreate('easy')" @command="openCreate">
         新建组件
         <template #dropdown>
@@ -32,6 +33,7 @@
       </el-dropdown>
     </PageHeader>
 
+    <PageState :error="loadError" @retry="load" />
     <el-alert
       v-if="showGuide"
       class="guide-alert"
@@ -97,19 +99,26 @@
             <el-tag :type="row.isPreset ? 'warning' : 'info'" size="small">{{ row.isPreset ? '预置' : '自定义' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <div class="qz-ops">
               <el-button type="primary" link @click="openDetail(row)">详情</el-button>
               <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
               <el-button type="primary" link @click="openTest(row)">试连通</el-button>
-              <el-button v-if="!row.isPreset" type="primary" link @click="openClone(row)">复制</el-button>
-              <el-button v-if="!row.isPreset" type="danger" link @click="onDelete(row)">删除</el-button>
+              <el-dropdown v-if="!row.isPreset" trigger="click" @command="(cmd) => onRowCommand(cmd, row)">
+                <el-button type="primary" link>更多</el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="clone">复制</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty v-if="!loading" :description="hasListFilters ? '没有匹配的组件' : '还没有接口组件'">
+          <el-empty v-if="!loading && !loadError" :description="emptyText">
             <el-button type="primary" @click="openCreate('easy')">新建组件</el-button>
           </el-empty>
         </template>
@@ -359,6 +368,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
+import PageState from '@/components/PageState.vue'
 import ComponentAuthPanel from '@/components/ComponentAuthPanel.vue'
 import ComponentCreateWizard from '@/components/ComponentCreateWizard.vue'
 import ComponentCurlImport from '@/components/ComponentCurlImport.vue'
@@ -374,6 +384,7 @@ import { askConfirm } from '@/utils/confirm'
 import { copyText, formatJson } from '@/utils/format'
 import { createComponent, deleteComponent, pageComponents, testComponent, updateComponent } from '@/api/component'
 import { pageCredentials } from '@/api/credential'
+import { networkErrorMessage } from '@/api/http'
 import {
   CATEGORY_LABEL,
   categoryLabel,
@@ -409,6 +420,7 @@ const total = ref(0)
 const current = ref(route.query.page ? Number(route.query.page) : 1)
 const size = ref(10)
 const loading = ref(false)
+const loadError = ref('')
 const syncingQuery = ref(false)
 
 const createVisible = ref(false)
@@ -462,6 +474,12 @@ const testTitle = computed(() => (testRow.value ? `试连通 · ${testRow.value.
 const detailTitle = computed(() => (detailRow.value ? `组件详情 · ${detailRow.value.componentName}` : '组件详情'))
 const detailQueryFields = computed(() => (detailRow.value ? schemaToFields(detailRow.value.querySchema) : []))
 const detailBodyFields = computed(() => (detailRow.value ? schemaToFields(detailRow.value.bodySchema) : []))
+const emptyText = computed(() => {
+  if (keyword.value || category.value || presetFilter.value || httpMethod.value) {
+    return '没有匹配的组件'
+  }
+  return '还没有接口组件，接入一个 HTTP 接口后即可在设计器中使用'
+})
 
 function applyQuery() {
   keyword.value = route.query.keyword || ''
@@ -486,6 +504,7 @@ function syncQuery() {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await pageComponents({
       current: current.value,
@@ -497,6 +516,9 @@ async function load() {
     })
     records.value = res.data?.records || []
     total.value = Number(res.data?.total || 0)
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+    records.value = []
   } finally {
     loading.value = false
   }
@@ -814,6 +836,11 @@ async function onDelete(row) {
   await deleteComponent(row.id)
   ElMessage.success('已删除')
   await load()
+}
+
+function onRowCommand(command, row) {
+  if (command === 'clone') return openClone(row)
+  if (command === 'delete') return onDelete(row)
 }
 
 watch(

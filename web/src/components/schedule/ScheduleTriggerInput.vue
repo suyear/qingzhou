@@ -2,15 +2,15 @@
   <div class="schedule-trigger-input">
     <div class="panel-head">
       <div>
-        <strong>触发入参</strong>
-        <p class="head-desc">用表单填写即可，右侧会实时显示实际传给工作流的数据</p>
+        <strong>{{ compact ? '调用入参' : '触发入参' }}</strong>
+        <p class="head-desc">{{ compact ? '用表单填写即可，也可切换 JSON' : '用表单填写即可，右侧会实时显示实际传给工作流的数据' }}</p>
       </div>
       <el-button size="small" text type="primary" @click="toggleAdvanced">
         {{ advanced ? '返回表单填写' : '高级 JSON 模式' }}
       </el-button>
     </div>
 
-    <div class="panel-body">
+    <div class="panel-body" :class="{ compact }">
       <div class="input-side">
         <template v-if="!advanced">
           <el-alert
@@ -122,7 +122,7 @@
         </template>
       </div>
 
-      <div class="preview-side">
+      <div v-if="!compact" class="preview-side">
         <div class="preview-head">
           <span>传参预览</span>
           <el-tag size="small" :type="previewCount ? 'success' : 'info'">
@@ -159,6 +159,7 @@ import {
 const props = defineProps({
   inputSchema: { type: [Object, String], default: null },
   modelValue: { type: [Object, String], default: null },
+  compact: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -374,6 +375,13 @@ defineExpose({
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
   gap: 0;
+}
+
+.panel-body.compact {
+  grid-template-columns: 1fr;
+}
+.panel-body.compact .input-side {
+  border-right: none;
 }
 
 .input-side {

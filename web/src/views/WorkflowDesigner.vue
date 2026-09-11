@@ -14,10 +14,10 @@
       </div>
       <div class="tb-mid">
         <div class="step-pills">
-          <span class="step-pill" :class="{ active: canvasEmpty }">① 添加步骤</span>
-          <span class="step-pill" :class="{ active: !canvasEmpty && !allConfigured }">② 配置参数</span>
-          <span class="step-pill">③ 试运行</span>
-          <span class="step-pill">④ 发布</span>
+          <span class="step-pill" :class="{ active: canvasEmpty, done: !canvasEmpty }">① 添加步骤</span>
+          <span class="step-pill" :class="{ active: !canvasEmpty && !allConfigured, done: allConfigured }">② 配置参数</span>
+          <span class="step-pill" :class="{ active: allConfigured && form.status !== 'PUBLISHED', done: form.status === 'PUBLISHED' }">③ 试运行</span>
+          <span class="step-pill" :class="{ active: form.status === 'PUBLISHED', done: form.status === 'PUBLISHED' }">④ 发布</span>
         </div>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
         <el-button type="success" :loading="running" @click="tryRun">试运行</el-button>
@@ -133,12 +133,13 @@
       </div>
     </div>
 
-    <el-dialog v-model="tryRunDialogVisible" title="试运行" width="480px">
+    <el-dialog v-model="tryRunDialogVisible" title="试运行" width="560px">
       <template v-if="runtimeFields.length">
         <p class="hint-block">填写以下参数后执行试运行（与调度 / 开放调用入参一致）</p>
         <el-form label-position="top" size="default">
-          <el-form-item v-for="field in runtimeFields" :key="field.key" :label="runtimeFieldLabel(field.key)">
-            <el-input v-model="tryRunForm[field.key]" :placeholder="`请输入 ${field.key}`" />
+          <el-form-item v-for="field in runtimeFields" :key="field.key" :required="true">
+            <template #label>{{ runtimeFieldLabel(field.key) }}</template>
+            <el-input v-model="tryRunForm[field.key]" :placeholder="`请输入 ${runtimeFieldLabel(field.key)}`" />
           </el-form-item>
         </el-form>
       </template>
@@ -170,29 +171,13 @@
         <el-button @click="publishSuccessVisible = false">继续编排</el-button>
       </template>
     </el-dialog>
-    <el-drawer v-model="logVisible" title="试运行结果" size="520px">
-      <div v-if="runResult">
-        <div class="run-head">
-          <p>状态：{{ execStatusLabel(runResult.instance?.status) }}　单号：{{ runResult.instance?.executionNo }}</p>
-          <el-button type="primary" link @click="$router.push(executionLink)">去运行记录</el-button>
-        </div>
-        <p v-if="runResult.instance?.errorMsg" class="err">{{ runResult.instance.errorMsg }}</p>
-        <el-timeline>
-          <el-timeline-item
-            v-for="item in runResult.logs"
-            :key="item.id"
-            :timestamp="formatTime(item.startTime)"
-          >
-            <div class="log-title">
-              {{ item.nodeName }} {{ item.requestMethod }}
-              <el-tag size="small" :type="execStatusType(item.status)">{{ execStatusLabel(item.status) }}</el-tag>
-            </div>
-            <div class="log-sub">{{ item.requestUrl }}</div>
-            <div v-if="item.errorMsg" class="err">{{ item.errorMsg }}</div>
-            <div v-else>HTTP {{ item.responseStatus }}　耗时 {{ durationText(item.durationMs) }}　重试 {{ item.retryCount }}</div>
-          </el-timeline-item>
-        </el-timeline>
-      </div>
+    <el-drawer v-model="logVisible" title="试运行结果" size="640px">
+      <ExecutionLogView
+        v-if="runResult"
+        :instance="runResult.instance"
+        :logs="runResult.logs"
+        :execution-link="executionLink"
+      />
     </el-drawer>
   </div>
 </template>
@@ -226,7 +211,8 @@ import {
 } from '@/utils/workflowBinding'
 import WorkflowStepEditor from '@/components/designer/WorkflowStepEditor.vue'
 import { NODE_SHAPE, registerComponentNode } from '@/components/designer/registerNodes'
-import { durationText, execStatusLabel, execStatusType, formatTime, workflowStatusLabel } from '@/utils/format'
+import { formatTime, workflowStatusLabel } from '@/utils/format'
+import ExecutionLogView from '@/components/ExecutionLogView.vue'
 
 registerComponentNode()
 const TeleportContainer = getTeleport()
@@ -488,9 +474,13 @@ function createGraph() {
   graph.use(new Selection({ enabled: true, rubberband: false, showNodeSelectionBox: false }))
   graph.on('scale', syncZoomPercent)
   graph.use(new Keyboard({ enabled: true }))
-  graph.bindKey(['backspace', 'delete'], async () => {
-    if (!selectedId.value) return
-    await removeStep(selectedId.value)
+  graph.bindKey(['backspace', 'delete'], () => {
+    if (!selectedId.value) return false
+    const id = selectedId.value
+    askConfirm('删除当前步骤？未保存的参数配置会一起丢掉。', '删除步骤').then((ok) => {
+      if (ok) removeStep(id)
+    })
+    return false
   })
   graph.on('node:added', ({ node }) => {
     nodeTick.value += 1
@@ -939,6 +929,7 @@ async function tryRun() {
     return
   }
   tryRunForm.value = Object.fromEntries(fields.map((item) => [item.key, '']))
+  tryRunInput.value = '{}'
   tryRunDialogVisible.value = true
 }
 
@@ -959,19 +950,23 @@ async function confirmTryRun() {
   try {
     let input = {}
     if (runtimeFields.value.length) {
-      input = { ...tryRunForm.value }
+      let parsed = null
+      if (tryRunInput.value.trim()) {
+        try {
+          parsed = JSON.parse(tryRunInput.value)
+        } catch {
+          ElMessage.warning('试运行入参不是合法 JSON')
+          return
+        }
+      }
+      input = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed
+        : { ...tryRunForm.value }
       for (const field of runtimeFields.value) {
         if (!String(input[field.key] ?? '').trim()) {
           ElMessage.warning(`请填写 ${runtimeFieldLabel(field.key)}`)
           return
         }
-      }
-    } else if (tryRunInput.value.trim()) {
-      try {
-        input = JSON.parse(tryRunInput.value)
-      } catch {
-        ElMessage.warning('试运行入参不是合法 JSON')
-        return
       }
     }
     const res = await tryRunWorkflow(route.params.id, { input })
@@ -1073,6 +1068,9 @@ function updateNodeName(name) {
   markDirty()
 }
 
+watch(tryRunForm, (val) => {
+  tryRunInput.value = JSON.stringify(val || {}, null, 2)
+}, { deep: true })
 watch(() => [form.workflowName, form.workflowCode, form.credentialMode, form.credentialId], markDirty)
 watch(nodeBindings, markDirty, { deep: true })
 watch(
@@ -1107,7 +1105,9 @@ function onWindowResize() {
 onMounted(() => {
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('resize', onWindowResize)
-  bootstrap()
+  bootstrap().catch(() => {
+    ElMessage.error('设计器加载失败，请确认后端服务已启动（默认 18080）')
+  })
 })
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
@@ -1191,6 +1191,9 @@ onBeforeUnmount(() => {
   color: var(--el-color-primary);
   background: var(--qz-primary-soft);
   font-weight: 600;
+}
+.step-pill.done:not(.active) {
+  color: var(--el-color-success);
 }
 .canvas-panel {
   width: 0;

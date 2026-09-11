@@ -186,3 +186,24 @@ body,
 .search-input {
   width: 220px;
 }
+
+.el-dialog__body {
+  max-height: min(70vh, 720px);
+  overflow-y: auto;
+}
+
+.el-drawer__body {
+  overflow-y: auto;
+}
+
+.qz-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--qz-primary-soft);
+  color: var(--el-color-primary);
+  font-size: 12px;
+}

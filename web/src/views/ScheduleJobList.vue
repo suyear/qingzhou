@@ -6,11 +6,14 @@
         class="search-input"
         placeholder="搜索任务名 / 规则"
         clearable
-        @keyup.enter="load"
-        @clear="load"
+        @keyup.enter="reload"
+        @clear="reload"
       />
-      <el-button type="primary" @click="openCreate">新建任务</el-button>
+      <el-button @click="reload">查询</el-button>
+      <el-button type="primary" @click="openCreate()">新建任务</el-button>
     </PageHeader>
+
+    <PageState :error="loadError" @retry="boot" />
 
     <el-alert
       v-if="modeHint && showModeHint"
@@ -59,7 +62,10 @@
           </template>
         </el-table-column>
         <el-table-column label="下次触发" min-width="150">
-          <template #default="{ row }">{{ formatTime(row.nextFireTime) }}</template>
+          <template #default="{ row }">
+            <div>{{ formatTime(row.nextFireTime) }}</div>
+            <div v-if="row.lastFireTime" class="sub">上次 {{ formatTime(row.lastFireTime) }}</div>
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
@@ -68,11 +74,11 @@
               <el-button v-if="row.status !== 1" type="success" link @click="onStart(row)">启动</el-button>
               <el-button v-else type="warning" link @click="onStop(row)">停止</el-button>
               <el-button type="primary" link :loading="row._triggering" @click="onTrigger(row)">立即触发</el-button>
-              <el-dropdown trigger="click" @command="(cmd) => onRowMore(cmd, row)">
+              <el-dropdown trigger="click" @command="(cmd) => onRowCommand(cmd, row)">
                 <el-button type="primary" link>更多</el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="records">运行记录</el-dropdown-item>
+                    <el-dropdown-item command="records">查看记录</el-dropdown-item>
                     <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -81,11 +87,8 @@
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty
-            v-if="!loading"
-            :description="workflows.length ? '还没有调度任务' : '还没有已发布工作流，发布后即可配置自动触发'"
-          >
-            <el-button v-if="workflows.length" type="primary" @click="openCreate">新建任务</el-button>
+          <el-empty v-if="!loading && !loadError" :description="emptyText">
+            <el-button v-if="workflows.length" type="primary" @click="openCreate()">新建任务</el-button>
             <el-button v-else type="primary" @click="$router.push('/workflows')">去发布工作流</el-button>
           </el-empty>
         </template>
@@ -135,6 +138,10 @@
               :value="wf.id"
             />
           </el-select>
+          <p v-if="!workflows.length" class="hint">
+            还没有已发布工作流，
+            <el-button type="primary" link @click="$router.push('/workflows')">去编排发布</el-button>
+          </p>
         </el-form-item>
         <el-form-item label="任务名称">
           <el-input v-model="form.jobName" placeholder="默认使用工作流名称" />
@@ -169,11 +176,13 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
+import PageState from '@/components/PageState.vue'
 import ScheduleRuleEditor from '@/components/schedule/ScheduleRuleEditor.vue'
 import ScheduleTriggerInput from '@/components/schedule/ScheduleTriggerInput.vue'
 import { askConfirm } from '@/utils/confirm'
 import { formatTime } from '@/utils/format'
 import { normalizeTriggerInput } from '@/utils/triggerInput'
+import { networkErrorMessage } from '@/api/http'
 import {
   defaultScheduleForm,
   formToPayload,
@@ -201,9 +210,11 @@ const total = ref(0)
 const current = ref(1)
 const size = ref(10)
 const loading = ref(false)
+const loadError = ref('')
 const modeHint = ref('加载调度模式…')
 const showModeHint = ref(true)
 const allWorkflows = ref([])
+const statJobs = ref([])
 const workflows = computed(() => allWorkflows.value.filter((item) => item.status === 'PUBLISHED'))
 const workflowMap = computed(() => {
   const map = {}
@@ -213,12 +224,18 @@ const workflowMap = computed(() => {
   return map
 })
 const stats = computed(() => {
-  const running = records.value.filter((item) => item.status === 1).length
+  const running = statJobs.value.filter((item) => item.status === 1).length
+  const totalCount = statJobs.value.length || total.value
   return {
-    total: total.value,
+    total: totalCount,
     running,
-    stopped: Math.max(total.value - running, 0),
+    stopped: Math.max(totalCount - running, 0),
   }
+})
+const emptyText = computed(() => {
+  if (keyword.value) return '没有匹配的调度任务'
+  if (!workflows.value.length) return '还没有已发布工作流，发布后即可配置自动触发'
+  return '还没有调度任务'
 })
 const dialogVisible = ref(false)
 const saving = ref(false)
@@ -245,12 +262,30 @@ async function loadMode() {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await pageScheduleJobs({ current: current.value, size: size.value, keyword: keyword.value })
     records.value = res.data?.records || []
     total.value = Number(res.data?.total || 0)
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+    records.value = []
   } finally {
     loading.value = false
+  }
+}
+
+function reload() {
+  current.value = 1
+  load()
+}
+
+async function loadStats() {
+  try {
+    const res = await pageScheduleJobs({ current: 1, size: 100 })
+    statJobs.value = res.data?.records || []
+  } catch {
+    statJobs.value = []
   }
 }
 
@@ -345,6 +380,7 @@ async function save() {
     ElMessage.warning('请填写 Cron 表达式')
     return
   }
+  const triggerInput = buildTriggerInputPayload()
   saving.value = true
   try {
     const payload = {
@@ -353,7 +389,7 @@ async function save() {
       remark: form.remark,
       start: form.start,
       ...rulePayload,
-      triggerInput: buildTriggerInputPayload(),
+      triggerInput,
     }
     if (form.id) {
       await updateScheduleJob(form.id, payload)
@@ -362,7 +398,7 @@ async function save() {
     }
     ElMessage.success('已保存')
     dialogVisible.value = false
-    await load()
+    await Promise.all([load(), loadStats()])
   } finally {
     saving.value = false
   }
@@ -372,14 +408,14 @@ async function onStart(row) {
   if (!(await askConfirm(`启动任务「${row.jobName}」？`, '启动确认', { type: 'info' }))) return
   await startScheduleJob(row.id)
   ElMessage.success('已启动')
-  await load()
+  await Promise.all([load(), loadStats()])
 }
 
 async function onStop(row) {
   if (!(await askConfirm(`停止任务「${row.jobName}」？`, '停止确认'))) return
   await stopScheduleJob(row.id)
   ElMessage.success('已停止')
-  await load()
+  await Promise.all([load(), loadStats()])
 }
 
 async function onTrigger(row) {
@@ -389,7 +425,7 @@ async function onTrigger(row) {
     const res = await triggerScheduleJob(row.id)
     const status = res.data?.instance?.status
     ElMessage.success(status === 'SUCCESS' ? '触发成功' : `触发完成：${status || '未知'}`)
-    await load()
+    await Promise.all([load(), loadStats()])
   } finally {
     row._triggering = false
   }
@@ -399,23 +435,32 @@ async function onDelete(row) {
   if (!(await askConfirm(`删除任务「${row.jobName}」？`))) return
   await deleteScheduleJob(row.id)
   ElMessage.success('已删除')
-  await load()
+  await Promise.all([load(), loadStats()])
 }
 
-function onRowMore(command, row) {
+function onRowCommand(command, row) {
   if (command === 'records') {
-    router.push({ path: '/executions', query: { workflowId: row.workflowId, triggerType: 'SCHEDULE' } })
-    return
+    return router.push({
+      path: '/executions',
+      query: { workflowId: String(row.workflowId), triggerType: 'SCHEDULE' },
+    })
   }
-  if (command === 'delete') onDelete(row)
+  if (command === 'delete') return onDelete(row)
 }
 
-onMounted(async () => {
-  await Promise.all([loadMode(), load(), loadWorkflows()])
+async function boot() {
+  loadError.value = ''
+  try {
+    await Promise.all([loadMode(), load(), loadStats(), loadWorkflows()])
+  } catch (error) {
+    loadError.value = networkErrorMessage(error)
+  }
   if (route.query.workflowId) {
     openCreate(route.query.workflowId)
   }
-})
+}
+
+onMounted(boot)
 </script>
 
 <style scoped>
