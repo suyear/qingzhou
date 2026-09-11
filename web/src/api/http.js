@@ -15,7 +15,11 @@ http.interceptors.response.use(
     return body
   },
   (err) => {
-    ElMessage.error(err.response?.data?.message || err.message || '网络异常')
+    if (!err.response) {
+      ElMessage.error('网络异常，请确认后端服务已启动')
+    } else {
+      ElMessage.error(err.response?.data?.message || err.message || '请求失败')
+    }
     return Promise.reject(err)
   },
 )

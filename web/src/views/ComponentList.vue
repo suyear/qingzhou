@@ -109,7 +109,7 @@
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty v-if="!loading" description="没有匹配的组件">
+          <el-empty v-if="!loading" :description="hasListFilters ? '没有匹配的组件' : '还没有接口组件'">
             <el-button type="primary" @click="openCreate('easy')">新建组件</el-button>
           </el-empty>
         </template>
@@ -413,6 +413,7 @@ const syncingQuery = ref(false)
 
 const createVisible = ref(false)
 const createMode = ref('easy')
+const hasListFilters = computed(() => Boolean(keyword.value || category.value || presetFilter.value || httpMethod.value))
 
 function openCreate(mode = 'easy') {
   createMode.value = mode

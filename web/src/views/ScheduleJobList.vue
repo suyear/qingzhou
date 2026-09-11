@@ -12,7 +12,14 @@
       <el-button type="primary" @click="openCreate">新建任务</el-button>
     </PageHeader>
 
-    <el-alert :title="modeHint" type="info" :closable="false" class="mode-alert" />
+    <el-alert
+      v-if="modeHint && showModeHint"
+      :title="modeHint"
+      type="info"
+      closable
+      class="mode-alert"
+      @close="showModeHint = false"
+    />
 
     <div class="stat-grid">
       <div class="stat-card">
@@ -54,27 +61,32 @@
         <el-table-column label="下次触发" min-width="150">
           <template #default="{ row }">{{ formatTime(row.nextFireTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <div class="qz-ops">
               <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
               <el-button v-if="row.status !== 1" type="success" link @click="onStart(row)">启动</el-button>
               <el-button v-else type="warning" link @click="onStop(row)">停止</el-button>
               <el-button type="primary" link :loading="row._triggering" @click="onTrigger(row)">立即触发</el-button>
-              <el-button
-                type="primary"
-                link
-                @click="$router.push({ path: '/executions', query: { workflowId: row.workflowId, triggerType: 'SCHEDULE' } })"
-              >
-                记录
-              </el-button>
-              <el-button type="danger" link @click="onDelete(row)">删除</el-button>
+              <el-dropdown trigger="click" @command="(cmd) => onRowMore(cmd, row)">
+                <el-button type="primary" link>更多</el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="records">运行记录</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty v-if="!loading" description="还没有调度任务，发布工作流后即可配置自动触发">
-            <el-button type="primary" @click="openCreate">新建任务</el-button>
+          <el-empty
+            v-if="!loading"
+            :description="workflows.length ? '还没有调度任务' : '还没有已发布工作流，发布后即可配置自动触发'"
+          >
+            <el-button v-if="workflows.length" type="primary" @click="openCreate">新建任务</el-button>
+            <el-button v-else type="primary" @click="$router.push('/workflows')">去发布工作流</el-button>
           </el-empty>
         </template>
       </el-table>
@@ -95,8 +107,19 @@
       :title="form.id ? '编辑调度任务' : '新建调度任务'"
       width="920px"
       destroy-on-close
+      class="schedule-dialog"
     >
-      <el-form :model="form" label-width="96px">
+      <el-alert
+        v-if="!workflows.length"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mode-alert"
+        title="当前没有已发布工作流，请先发布后再创建调度。"
+      >
+        <el-button type="primary" link @click="dialogVisible = false; $router.push('/workflows')">去发布</el-button>
+      </el-alert>
+      <el-form :model="form" label-width="108px">
         <el-form-item label="工作流" required>
           <el-select
             v-model="form.workflowId"
@@ -126,8 +149,8 @@
             :input-schema="selectedWorkflow.inputSchema"
           />
         </el-form-item>
-        <el-form-item v-if="!form.id" label="创建后启动">
-          <el-switch v-model="form.start" />
+        <el-form-item v-if="!form.id" label="保存后启动">
+          <el-switch v-model="form.start" active-text="立即运行" inactive-text="仅保存" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -143,7 +166,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import ScheduleRuleEditor from '@/components/schedule/ScheduleRuleEditor.vue'
@@ -171,6 +194,7 @@ import {
 } from '@/api/schedule'
 
 const route = useRoute()
+const router = useRouter()
 const keyword = ref('')
 const records = ref([])
 const total = ref(0)
@@ -178,6 +202,7 @@ const current = ref(1)
 const size = ref(10)
 const loading = ref(false)
 const modeHint = ref('加载调度模式…')
+const showModeHint = ref(true)
 const allWorkflows = ref([])
 const workflows = computed(() => allWorkflows.value.filter((item) => item.status === 'PUBLISHED'))
 const workflowMap = computed(() => {
@@ -290,6 +315,10 @@ function buildTriggerInputPayload() {
 }
 
 async function save() {
+  if (!workflows.value.length) {
+    ElMessage.warning('请先发布工作流再创建调度')
+    return
+  }
   if (!form.workflowId) {
     ElMessage.warning('请选择工作流')
     return
@@ -373,6 +402,14 @@ async function onDelete(row) {
   await load()
 }
 
+function onRowMore(command, row) {
+  if (command === 'records') {
+    router.push({ path: '/executions', query: { workflowId: row.workflowId, triggerType: 'SCHEDULE' } })
+    return
+  }
+  if (command === 'delete') onDelete(row)
+}
+
 onMounted(async () => {
   await Promise.all([loadMode(), load(), loadWorkflows()])
   if (route.query.workflowId) {
@@ -414,5 +451,12 @@ onMounted(async () => {
 .sub {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+</style>
+
+<style>
+.schedule-dialog .el-dialog__body {
+  max-height: 72vh;
+  overflow-y: auto;
 }
 </style>

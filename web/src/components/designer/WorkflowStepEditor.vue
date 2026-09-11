@@ -12,8 +12,16 @@
           class="progress-bar"
         />
       </div>
-      <div v-if="chainNodes.length" class="head-actions">
-        <el-button type="success" :disabled="!canTryRun" @click="emit('try-run')">试运行</el-button>
+      <div class="head-actions">
+        <el-button
+          v-if="chainNodes.length"
+          size="small"
+          :type="canvasVisible ? 'primary' : 'default'"
+          @click="emit('toggle-canvas')"
+        >
+          {{ canvasVisible ? '收起流程图' : '查看流程图' }}
+        </el-button>
+        <el-button v-if="chainNodes.length" type="success" :disabled="!canTryRun" @click="emit('try-run')">试运行</el-button>
         <el-button type="primary" @click="focusQuickAdd">+ 添加步骤</el-button>
       </div>
     </div>
@@ -221,19 +229,21 @@
             </div>
 
             <div v-if="optionalFields.length" class="field-section">
-              <div class="section-head">
+              <button type="button" class="section-toggle" @click="showOptional = !showOptional">
                 <span class="section-title">可选参数</span>
-                <span class="section-hint">{{ optionalFields.length }} 项</span>
-              </div>
-              <WorkflowParamField
-                v-for="field in optionalFields"
-                :key="field.key"
-                :field="field"
-                :binding="findBinding(field.key)"
-                :upstream-nodes="upstreamNodes"
-                :upstream-field-map="upstreamFieldMap"
-                @change="(patch) => patchBinding(field.key, patch)"
-              />
+                <span class="section-hint">{{ optionalFields.length }} 项 · {{ showOptional ? '收起' : '展开' }}</span>
+              </button>
+              <template v-if="showOptional">
+                <WorkflowParamField
+                  v-for="field in optionalFields"
+                  :key="field.key"
+                  :field="field"
+                  :binding="findBinding(field.key)"
+                  :upstream-nodes="upstreamNodes"
+                  :upstream-field-map="upstreamFieldMap"
+                  @change="(patch) => patchBinding(field.key, patch)"
+                />
+              </template>
             </div>
           </div>
         </template>
@@ -268,15 +278,17 @@ const props = defineProps({
   components: { type: Array, default: () => [] },
   canTryRun: { type: Boolean, default: false },
   canPublish: { type: Boolean, default: false },
+  canvasVisible: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'remove', 'move', 'add', 'update-name', 'update-bindings', 'try-run', 'publish'])
+const emit = defineEmits(['select', 'remove', 'move', 'add', 'update-name', 'update-bindings', 'try-run', 'publish', 'toggle-canvas'])
 
-const leftTab = ref('steps')
+const leftTab = ref('add')
 const pickerKeyword = ref('')
 const quickAddLimit = ref(12)
 const quickAddRef = ref(null)
 const leftScrollRef = ref(null)
+const showOptional = ref(false)
 
 const selectedIndex = computed(() => {
   const idx = props.chainNodes.findIndex((item) => item.id === props.selectedId)
@@ -303,6 +315,7 @@ const filteredComponents = computed(() => {
 })
 
 watch(() => props.selectedId, async (id) => {
+  showOptional.value = optionalFields.value.length > 0 && optionalFields.value.length <= 2
   if (!id) return
   leftTab.value = 'steps'
   await nextTick()
@@ -310,7 +323,8 @@ watch(() => props.selectedId, async (id) => {
 })
 
 watch(() => props.chainNodes.length, (len, prev) => {
-  if (len > prev) leftTab.value = 'steps'
+  if (len > (prev || 0)) leftTab.value = 'steps'
+  if (!len) leftTab.value = 'add'
 })
 
 function findBinding(key) {
@@ -656,10 +670,21 @@ function focusQuickAdd() {
 .config-empty { padding: 12px 0; }
 .empty-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 .field-section { margin-bottom: 16px; }
-.section-head {
+.section-head,
+.section-toggle {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  width: 100%;
   margin-bottom: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.section-toggle:hover .section-title {
+  color: var(--el-color-primary);
 }
 .section-title { font-size: 13px; font-weight: 700; }
 .section-hint { font-size: 12px; color: var(--qz-text-muted); }

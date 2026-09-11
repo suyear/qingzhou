@@ -56,8 +56,8 @@
           </template>
           <div class="hotkeys">
             <div>Delete：删除当前步骤</div>
-            <div>流程图：空白处拖拽平移</div>
-            <div>流程图：滚轮缩放（或右下角按钮）</div>
+            <div>流程图：空白处拖拽或双指滑动平移</div>
+            <div>流程图：Ctrl / ⌘ + 滚轮缩放（也可用按钮）</div>
           </div>
         </el-popover>
       </div>
@@ -72,7 +72,7 @@
     <div class="body">
       <aside class="palette">
         <div class="palette-title">接口组件</div>
-        <p class="palette-hint">点击添加；中间区域底部也可快速添加</p>
+        <p class="palette-hint">点击添加到调用链末尾；中间「添加接口」同样可用</p>
         <el-input v-model="keyword" size="small" placeholder="筛选组件" clearable />
         <div v-if="!components.length" class="palette-empty">
           <p>还没有接口组件</p>
@@ -106,6 +106,7 @@
         :components="componentOptions"
         :can-try-run="!canvasEmpty && allConfigured"
         :can-publish="Boolean(route.params.id) && allConfigured"
+        :canvas-visible="canvasVisible"
         @select="selectNode"
         @add="addToChain"
         @remove="removeStep"
@@ -114,6 +115,7 @@
         @update-bindings="onBindingsChange"
         @try-run="tryRun"
         @publish="publish"
+        @toggle-canvas="toggleCanvas"
       />
       <aside class="canvas-panel" :class="{ open: canvasVisible }">
         <div class="canvas-panel-head">
@@ -135,7 +137,7 @@
             <p>添加步骤后可在此查看流程图</p>
           </div>
           <div v-else class="canvas-overlay">
-            <span class="canvas-hint">空白处拖拽平移 · 滚轮缩放</span>
+            <span class="canvas-hint">拖空白平移 · Ctrl / ⌘ + 滚轮缩放</span>
             <div class="canvas-float-tools">
               <span class="zoom-pill">{{ zoomPercent }}%</span>
               <el-button-group size="small">
@@ -280,12 +282,13 @@ const dirty = ref(false)
 const canvasVisible = ref(false)
 const canvasWrapRef = ref(null)
 const zoomPercent = ref(100)
-const ZOOM_MIN = 0.35
-const ZOOM_MAX = 2
-const ZOOM_STEP = 0.1
-const WHEEL_ZOOM_FACTOR = 1.06
+const ZOOM_MIN = 0.25
+const ZOOM_MAX = 2.5
+const ZOOM_STEP = 0.15
+const WHEEL_ZOOM_FACTOR = 1.02
 let hydrating = false
 let ready = false
+let canvasResizeObserver = null
 const canvasEmpty = computed(() => {
   nodeTick.value
   return !graph || graph.getNodes().length === 0
@@ -467,15 +470,16 @@ function createGraph() {
     container: canvasRef.value,
     width,
     height,
-    autoResize: false,
+    autoResize: true,
     grid: { size: 12, visible: true },
     panning: {
       enabled: true,
-      eventTypes: ['leftMouseDown'],
+      eventTypes: ['leftMouseDown', 'mouseWheel'],
     },
     mousewheel: {
       enabled: true,
       global: false,
+      modifiers: ['ctrl', 'meta'],
       factor: WHEEL_ZOOM_FACTOR,
       zoomAtMousePosition: true,
       minScale: ZOOM_MIN,
@@ -554,6 +558,22 @@ function createGraph() {
     }
     selectNode(node.id)
   })
+  bindCanvasResize()
+}
+
+function bindCanvasResize() {
+  canvasResizeObserver?.disconnect()
+  canvasResizeObserver = null
+  if (!canvasWrapRef.value || typeof ResizeObserver === 'undefined') return
+  canvasResizeObserver = new ResizeObserver(() => {
+    if (!graph || !canvasVisible.value) return
+    refreshCanvasView(false)
+  })
+  canvasResizeObserver.observe(canvasWrapRef.value)
+}
+
+function toggleCanvas() {
+  canvasVisible.value = !canvasVisible.value
 }
 
 function findComponent(data) {
@@ -1094,7 +1114,8 @@ watch(
 watch(canvasVisible, async (open) => {
   if (!graph || !open) return
   await nextTick()
-  // 等待侧栏展开动画结束后再计算尺寸
+  bindCanvasResize()
+  // 等待侧栏展开动画结束后再计算尺寸，否则拖拽/缩放命中区域是收起时的 0 宽
   window.setTimeout(() => refreshCanvasView(true), 240)
 })
 
@@ -1112,6 +1133,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
   window.removeEventListener('resize', onWindowResize)
+  canvasResizeObserver?.disconnect()
+  canvasResizeObserver = null
   graph?.dispose()
   graph = null
 })
@@ -1256,7 +1279,7 @@ onBeforeUnmount(() => {
   transition: width 0.2s ease;
 }
 .canvas-panel.open {
-  width: min(460px, 42vw);
+  width: min(640px, 50vw);
   border-left: 1px solid var(--qz-border);
 }
 .canvas-panel-head {
