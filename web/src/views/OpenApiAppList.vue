@@ -1,6 +1,6 @@
 <template>
   <div class="openapi-page">
-    <PageHeader title="开放平台" desc="外部系统通过签名 API 调用你已发布的工作流。">
+    <PageHeader title="开放平台" desc="把已发布的工作流变成外部可调用的 API。不会算签名也可以用「调用助手」试调并生成 curl。">
       <template v-if="pageTab === 'apps'">
         <el-input
           v-model="keyword"
@@ -288,7 +288,15 @@
         <div class="dialog-footer-row">
           <span class="grant-footer-hint">已选 {{ grantedIds.length }} 个</span>
           <el-button @click="grantVisible = false">取消</el-button>
-          <el-button type="primary" :loading="granting" @click="saveGrant">保存授权</el-button>
+          <el-button type="primary" :loading="granting" @click="saveGrant()">保存授权</el-button>
+          <el-button
+            type="success"
+            :loading="granting"
+            :disabled="!grantedIds.length"
+            @click="saveGrant(true)"
+          >
+            保存并试调
+          </el-button>
         </div>
       </template>
     </el-dialog>
@@ -322,7 +330,7 @@
     </el-dialog>
 
     <!-- 调用助手 -->
-    <el-dialog v-model="invokeVisible" :title="invokeTitle" width="860px" destroy-on-close class="invoke-dialog" @closed="resetInvoke">
+    <el-dialog v-model="invokeVisible" :title="invokeTitle" width="960px" destroy-on-close class="invoke-dialog" @closed="resetInvoke">
       <div v-if="!invokeWorkflows.length" class="invoke-empty">
         <el-empty description="该应用尚未授权任何工作流">
           <el-button type="primary" @click="openGrantFromInvoke">去授权工作流</el-button>
@@ -341,12 +349,29 @@
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="入参 JSON">
-              <div class="json-toolbar">
-                <el-button size="small" text type="primary" @click="formatInvokeJson">格式化</el-button>
-                <el-button size="small" text @click="invokeForm.inputText = '{}'">清空为 {}</el-button>
+            <div v-if="invokeFieldGuide.length" class="field-guide">
+              <div class="field-guide-head">
+                <strong>入参字段说明</strong>
+                <el-button type="primary" link @click="fillInvokeExample">填入示例</el-button>
               </div>
-              <el-input v-model="invokeForm.inputText" type="textarea" :rows="8" placeholder="{}" class="json-input" />
+              <ul class="field-guide-list">
+                <li v-for="field in invokeFieldGuide" :key="field.key">
+                  <code>{{ field.key }}</code>
+                  <span>{{ field.label }}</span>
+                  <el-tag size="small" :type="field.required ? 'danger' : 'info'" effect="plain">
+                    {{ field.required ? '必填' : '可选' }}
+                  </el-tag>
+                  <span class="muted">{{ field.type }} · 例 {{ formatExample(field.example) }}</span>
+                </li>
+              </ul>
+            </div>
+            <p v-else class="hint">该工作流未预定义入参，可用下方键值对或 JSON 自行添加。</p>
+            <el-form-item label="触发入参">
+              <ScheduleTriggerInput
+                ref="invokeInputRef"
+                v-model="invokeInputData"
+                :input-schema="selectedInvokeWorkflow?.inputSchema"
+              />
             </el-form-item>
           </el-form>
           <div class="invoke-btns">
@@ -378,8 +403,9 @@
                   <span class="result-title">可复制到终端或 Postman</span>
                   <el-button type="primary" link @click="copyCurl">复制 curl</el-button>
                 </div>
-                <pre>{{ preview.curl }}</pre>
+                <pre>{{ annotatedCurl }}</pre>
                 <p v-if="preview.tip" class="hint">{{ preview.tip }}</p>
+                <p class="hint">curl 上方注释来自工作流 schema，复制后可直接给对接同学。</p>
               </div>
               <el-empty v-else description="点击「生成 curl」或试调成功后自动出现" :image-size="72" />
             </el-tab-pane>
@@ -400,8 +426,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import OpenApiDocsPanel from '@/components/OpenApiDocsPanel.vue'
+import ScheduleTriggerInput from '@/components/schedule/ScheduleTriggerInput.vue'
 import { askConfirm } from '@/utils/confirm'
 import { copyText, formatTime } from '@/utils/format'
+import { annotateCurlWithFields, examplePayloadFromSchema, schemaFieldGuide } from '@/utils/triggerInput'
 import { pageWorkflows } from '@/api/workflow'
 import {
   bindOpenapiWorkflows,
@@ -442,7 +470,9 @@ const previewing = ref(false)
 const invoking = ref(false)
 const invokeApp = ref(null)
 const invokeResultTab = ref('result')
-const invokeForm = reactive({ workflowCode: '', inputText: '{}' })
+const invokeForm = reactive({ workflowCode: '' })
+const invokeInputData = ref(null)
+const invokeInputRef = ref(null)
 const preview = ref(null)
 const invokeResult = ref(null)
 const secretVisible = ref(false)
@@ -467,6 +497,14 @@ const invokeWorkflows = computed(() => {
   return publishedWorkflows.value.filter((item) => ids.has(Number(item.id)))
 })
 
+const selectedInvokeWorkflow = computed(() =>
+  invokeWorkflows.value.find((item) => item.workflowCode === invokeForm.workflowCode) || null,
+)
+
+const invokeFieldGuide = computed(() => schemaFieldGuide(selectedInvokeWorkflow.value?.inputSchema))
+
+const annotatedCurl = computed(() => annotateCurlWithFields(preview.value?.curl, invokeFieldGuide.value))
+
 const filteredGrantWorkflows = computed(() => {
   const q = grantKeyword.value.trim().toLowerCase()
   if (!q) return publishedWorkflows.value
@@ -480,6 +518,13 @@ const invokeOk = computed(() => invokeResult.value?.response?.code === 0)
 watch(secretVisible, (open) => {
   if (!open) secretConfirmed.value = false
 })
+
+watch(
+  () => invokeForm.workflowCode,
+  () => {
+    invokeInputData.value = null
+  },
+)
 
 function readinessTag(row) {
   if (row.status !== 1) return { label: '已停用', type: 'info' }
@@ -631,15 +676,20 @@ function selectAllGrants() {
   grantedIds.value = filteredGrantWorkflows.value.map((item) => Number(item.id))
 }
 
-async function saveGrant() {
+async function saveGrant(andInvoke = false) {
   granting.value = true
   try {
     await bindOpenapiWorkflows(currentApp.value.id, grantedIds.value)
     ElMessage.success(grantedIds.value.length ? '授权已更新' : '已撤销全部授权')
+    const app = currentApp.value
     grantVisible.value = false
     await load()
-    if (drawerApp.value?.id === currentApp.value?.id) {
-      drawerApp.value = records.value.find((item) => item.id === currentApp.value.id) || drawerApp.value
+    if (drawerApp.value?.id === app?.id) {
+      drawerApp.value = records.value.find((item) => item.id === app.id) || drawerApp.value
+    }
+    if (andInvoke && app && grantedIds.value.length) {
+      const latest = records.value.find((item) => item.id === app.id) || app
+      await openInvoke(latest)
     }
   } finally {
     granting.value = false
@@ -684,7 +734,7 @@ function resetInvoke() {
   invokeResult.value = null
   invokeResultTab.value = 'result'
   invokeForm.workflowCode = ''
-  invokeForm.inputText = '{}'
+  invokeInputData.value = null
 }
 
 async function copyField(text, message) {
@@ -721,20 +771,30 @@ function openGrantFromInvoke() {
   if (invokeApp.value) openGrant(invokeApp.value)
 }
 
-function parseInvokeInput() {
-  const text = invokeForm.inputText.trim() || '{}'
-  try {
-    return JSON.parse(text)
-  } catch {
-    ElMessage.warning('入参不是合法 JSON')
-    return null
-  }
+function fillInvokeExample() {
+  const example = examplePayloadFromSchema(selectedInvokeWorkflow.value?.inputSchema)
+  invokeInputData.value = Object.keys(example).length ? example : null
+  ElMessage.success('已填入示例入参，可按实际值修改')
 }
 
-function formatInvokeJson() {
-  const input = parseInvokeInput()
-  if (input == null) return
-  invokeForm.inputText = JSON.stringify(input, null, 2)
+function formatExample(value) {
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function parseInvokeInput() {
+  const inputError = invokeInputRef.value?.validate?.()
+  if (inputError) {
+    ElMessage.warning(inputError)
+    return null
+  }
+  const fromComponent = invokeInputRef.value?.getPayload?.()
+  if (fromComponent && typeof fromComponent === 'object') {
+    return fromComponent
+  }
+  return invokeInputData.value && typeof invokeInputData.value === 'object'
+    ? invokeInputData.value
+    : {}
 }
 
 async function makePreview() {
@@ -742,8 +802,23 @@ async function makePreview() {
     ElMessage.warning('请先选择工作流')
     return
   }
-  const input = parseInvokeInput()
-  if (input == null) return
+  let input = invokeInputRef.value?.getPayload?.()
+  const empty = !input || typeof input !== 'object' || !Object.keys(input).length
+  if (empty) {
+    const example = examplePayloadFromSchema(selectedInvokeWorkflow.value?.inputSchema)
+    if (Object.keys(example).length) {
+      invokeInputData.value = example
+      input = example
+    } else {
+      input = {}
+    }
+  } else {
+    const inputError = invokeInputRef.value?.validate?.()
+    if (inputError) {
+      ElMessage.warning(inputError)
+      return
+    }
+  }
   previewing.value = true
   try {
     const res = await previewOpenapiInvoke(invokeApp.value.id, {
@@ -791,8 +866,8 @@ function formatJson(value) {
 }
 
 async function copyCurl() {
-  if (!preview.value?.curl) return
-  await copyText(preview.value.curl)
+  if (!annotatedCurl.value) return
+  await copyText(annotatedCurl.value)
   ElMessage.success('已复制 curl')
 }
 
@@ -1010,9 +1085,42 @@ onMounted(async () => {
   color: var(--qz-text-muted);
 }
 .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.field-guide {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--qz-border);
+  border-radius: 8px;
+  background: var(--qz-fill);
+}
+.field-guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.field-guide-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.field-guide-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.field-guide-list code {
+  font-family: ui-monospace, Menlo, monospace;
+  background: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
 .invoke-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
   gap: 20px;
   min-height: 360px;
 }

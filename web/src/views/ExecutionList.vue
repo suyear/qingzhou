@@ -89,7 +89,7 @@
     </div>
     </div>
 
-    <el-drawer v-model="detailVisible" title="执行详情" size="560px" destroy-on-close @closed="resetDetail">
+    <el-drawer v-model="detailVisible" title="执行详情" size="720px" destroy-on-close @closed="resetDetail">
       <div v-loading="detailLoading">
         <div v-if="detail">
           <p>
@@ -116,13 +116,28 @@
             <el-button type="primary" link @click="onCopy(detail.instance.traceId, '已复制 Trace')">{{ detail.instance.traceId }}</el-button>
           </p>
           <p v-if="detail.instance?.errorMsg" class="err">{{ detail.instance.errorMsg }}</p>
-          <div class="input-block">
-            <div class="log-title">入参</div>
-            <pre class="payload">{{ formatJson(detail.instance?.inputParams) }}</pre>
-          </div>
-          <div v-if="detail.instance?.outputResult" class="input-block">
-            <div class="log-title">出参</div>
-            <pre class="payload">{{ formatJson(detail.instance.outputResult) }}</pre>
+          <div class="io-compare">
+            <div class="io-col">
+              <div class="io-head">
+                <span>入参</span>
+                <el-button type="primary" link @click="onCopy(formatJson(detail.instance?.inputParams), '已复制入参')">复制</el-button>
+              </div>
+              <pre class="payload">{{ formatJson(detail.instance?.inputParams) }}</pre>
+            </div>
+            <div class="io-col">
+              <div class="io-head">
+                <span>出参</span>
+                <el-button
+                  v-if="detail.instance?.outputResult"
+                  type="primary"
+                  link
+                  @click="onCopy(formatJson(detail.instance.outputResult), '已复制出参')"
+                >
+                  复制
+                </el-button>
+              </div>
+              <pre class="payload">{{ detail.instance?.outputResult ? formatJson(detail.instance.outputResult) : '暂无出参' }}</pre>
+            </div>
           </div>
           <el-button type="primary" :disabled="detail.instance?.status === 'RUNNING'" :loading="replaying" @click="onReplay(detail.instance)">重放此单</el-button>
           <el-timeline>
@@ -138,12 +153,36 @@
               <div class="log-sub">{{ item.requestUrl }}</div>
               <div v-if="item.errorMsg" class="err">{{ item.errorMsg }}</div>
               <div v-else>HTTP {{ item.responseStatus }}　耗时 {{ durationText(item.durationMs) }}　重试 {{ item.retryCount }}</div>
-              <el-collapse v-if="item.requestBody || item.responseBody">
-                <el-collapse-item title="请求 / 响应">
-                  <pre class="payload">{{ formatJson(item.requestBody) }}</pre>
-                  <pre class="payload">{{ formatJson(item.responseBody) }}</pre>
-                </el-collapse-item>
-              </el-collapse>
+              <div v-if="item.requestBody || item.responseBody" class="io-compare">
+                <div class="io-col">
+                  <div class="io-head">
+                    <span>请求</span>
+                    <el-button
+                      v-if="item.requestBody"
+                      type="primary"
+                      link
+                      @click="onCopy(formatJson(item.requestBody), '已复制请求')"
+                    >
+                      复制
+                    </el-button>
+                  </div>
+                  <pre class="payload">{{ item.requestBody ? formatJson(item.requestBody) : '—' }}</pre>
+                </div>
+                <div class="io-col">
+                  <div class="io-head">
+                    <span>响应</span>
+                    <el-button
+                      v-if="item.responseBody"
+                      type="primary"
+                      link
+                      @click="onCopy(formatJson(item.responseBody), '已复制响应')"
+                    >
+                      复制
+                    </el-button>
+                  </div>
+                  <pre class="payload">{{ item.responseBody ? formatJson(item.responseBody) : '—' }}</pre>
+                </div>
+              </div>
             </el-timeline-item>
           </el-timeline>
         </div>
@@ -351,13 +390,33 @@ onMounted(async () => {
 .log-sub { color: #64748b; font-size: 12px; word-break: break-all; }
 .err { color: #dc2626; font-size: 12px; }
 .input-block { margin: 12px 0 16px; }
+.io-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0 16px;
+}
+.io-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
 .payload {
-  margin: 0 0 8px;
+  margin: 0;
   padding: 8px;
+  max-height: 220px;
+  overflow: auto;
   background: #f8fafc;
+  border: 1px solid var(--qz-border, #e8eef5);
   border-radius: 6px;
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
+}
+@media (max-width: 720px) {
+  .io-compare { grid-template-columns: 1fr; }
 }
 </style>

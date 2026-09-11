@@ -2,7 +2,7 @@
   <div class="openapi-docs">
     <div class="docs-hero">
       <div class="docs-hero-title">外部系统如何调用你的工作流？</div>
-      <p class="docs-hero-desc">使用 App Key + Secret 签名，POST 到网关地址即可触发已授权的工作流。下方是完整接入说明。</p>
+      <p class="docs-hero-desc">不会写签名也没关系：在「应用管理」打开<strong>调用助手</strong>，填入参后点「生成 curl」即可复制到终端。下方是给对接同学的完整签名说明。</p>
     </div>
 
     <section class="doc-section">
@@ -10,8 +10,8 @@
       <ol class="steps">
         <li>在工作流编排中<strong>发布</strong>工作流，记下 <code>workflowCode</code></li>
         <li>在「应用管理」<strong>新建应用</strong>，保存 App Key 和 Secret（Secret 只显示一次）</li>
-        <li><strong>授权工作流</strong> → 打开「调用助手」生成 curl 或走网关试调</li>
-        <li>外部系统按下方签名规则调用网关接口</li>
+        <li><strong>授权工作流</strong> → 打开「调用助手」填表单或 JSON，生成 curl 或走网关试调</li>
+        <li>正式对接时按下方签名规则在服务端计算 HMAC（不要把 Secret 放到浏览器）</li>
       </ol>
     </section>
 

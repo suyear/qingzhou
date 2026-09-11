@@ -1,6 +1,6 @@
 <template>
   <div class="workflow-page">
-    <PageHeader title="工作流编排" desc="拖拽接口组件组成调用链，试运行通过后发布，即可用于定时调度和开放 API。">
+    <PageHeader title="工作流编排" desc="点击接口组成调用链，试运行通过后发布，即可用于定时调度和开放 API。">
       <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 120px" @change="reload">
         <el-option label="草稿" value="DRAFT" />
         <el-option label="已发布" value="PUBLISHED" />
@@ -41,8 +41,8 @@
       <div class="flow-step" :class="{ done: statTotal > 0 }">
         <span class="flow-badge">1</span>
         <div class="flow-body">
-          <strong>拖拽编排</strong>
-          <p>从组件库拖入节点并连线</p>
+          <strong>添加步骤</strong>
+            <p>从「添加接口」点选组件，配置参数组成调用链</p>
           <el-button type="primary" link @click="goCreate">新建工作流</el-button>
         </div>
       </div>
@@ -248,7 +248,7 @@ const statPublished = computed(() => statRecords.value.filter((item) => item.sta
 const statDisabled = computed(() => statRecords.value.filter((item) => item.status === 'DISABLED').length)
 const emptyText = computed(() => {
   if (keyword.value || statusFilter.value) return '没有匹配的工作流'
-  return '还没有工作流，从设计器开始拖一条调用链'
+  return '还没有工作流，打开设计器后从「添加接口」点选第一步'
 })
 
 function dismissGuide() {

@@ -1,8 +1,17 @@
-import { fieldLabel } from './workflowBinding'
-import { parseJson } from './schema'
+import { fieldLabel } from './workflowBinding.js'
+import { parseJson, schemaToFields } from './schema.js'
 
 export function emptyKvRow() {
   return { key: '', value: '' }
+}
+
+/** 将后端 JSON 字符串或对象规范为普通对象；无效/空则返回 null */
+export function normalizeTriggerInput(raw) {
+  const parsed = parseJson(raw, null)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null
+  }
+  return Object.keys(parsed).length ? parsed : null
 }
 
 export function objectToKvRows(obj) {
@@ -64,8 +73,12 @@ export function coerceFieldValue(field, raw) {
       .filter(Boolean)
   }
   if (type === 'object') {
-    if (typeof raw === 'object') return raw
-    return parseJson(String(raw), null)
+    if (typeof raw === 'object' && !Array.isArray(raw)) return raw
+    const parsed = parseJson(String(raw), null)
+    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return undefined
+    }
+    return parsed
   }
   return String(raw)
 }
@@ -103,7 +116,15 @@ export function objectToFormValues(fields, obj) {
   for (const field of fields || []) {
     const raw = parsed[field.key]
     if (raw == null) {
-      values[field.key] = field.default != null ? field.default : ''
+      if (field.default != null) {
+        values[field.key] = field.default
+      } else if (field.type === 'boolean') {
+        values[field.key] = false
+      } else if (field.type === 'integer' || field.type === 'number') {
+        values[field.key] = undefined
+      } else {
+        values[field.key] = ''
+      }
       continue
     }
     if (field.type === 'boolean') {
@@ -143,12 +164,24 @@ export function validateTriggerPayload({ fields, formValues, kvRows, jsonText, a
   if (built?.error) {
     return built.error
   }
-  if (!fields?.length || advanced) {
+  const payload = built?.value || {}
+  if (!fields?.length) {
     return ''
+  }
+  if (!advanced) {
+    for (const field of fields) {
+      if (field.type !== 'object') continue
+      const raw = formValues?.[field.key]
+      if (raw === '' || raw == null || typeof raw === 'object') continue
+      const parsed = parseJson(String(raw), null)
+      if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return `「${fieldLabel(field)}」需填写有效的 JSON 对象`
+      }
+    }
   }
   for (const field of fields) {
     if (!field.required) continue
-    const value = formValues[field.key]
+    const value = advanced ? payload[field.key] : formValues?.[field.key]
     if (value === '' || value == null) {
       return `请填写「${fieldLabel(field)}」`
     }
@@ -166,4 +199,56 @@ export function formatTriggerPreview(value) {
 export function previewKeyCount(value) {
   if (!value || typeof value !== 'object') return 0
   return Object.keys(value).length
+}
+
+export function exampleValueForField(field) {
+  if (field?.default != null) return field.default
+  if (field?.enums?.length) return field.enums[0]
+  const type = field?.type || 'string'
+  if (type === 'integer') return 1
+  if (type === 'number') return 1.5
+  if (type === 'boolean') return true
+  if (type === 'array') return ['example']
+  if (type === 'object') return { id: 1 }
+  const key = String(field?.key || '')
+  if (/id$/i.test(key) || key.toLowerCase().includes('userid')) return '10001'
+  return 'example'
+}
+
+export function examplePayloadFromSchema(schema) {
+  const fields = schemaToFields(schema)
+  const result = {}
+  for (const field of fields) {
+    result[field.key] = exampleValueForField(field)
+  }
+  return result
+}
+
+export function schemaFieldGuide(schema) {
+  return schemaToFields(schema).map((field) => ({
+    key: field.key,
+    label: fieldLabel(field),
+    required: Boolean(field.required),
+    type: field.type || 'string',
+    example: exampleValueForField(field),
+  }))
+}
+
+function formatGuideExample(value) {
+  if (value == null) return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+export function annotateCurlWithFields(curl, fields) {
+  const text = String(curl || '').trim()
+  if (!text) return ''
+  if (!fields?.length) return text
+  const notes = fields.map((field) => {
+    const flag = field.required ? '必填' : '可选'
+    const label = field.label && field.label !== field.key ? ` ${field.label}` : ''
+    const example = field.example != null ? ` · 例 ${formatGuideExample(field.example)}` : ''
+    return `# ${field.key}${label} · ${flag} · ${field.type}${example}`
+  })
+  return `${notes.join('\n')}\n${text}`
 }

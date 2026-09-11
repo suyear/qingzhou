@@ -12,8 +12,16 @@
           class="progress-bar"
         />
       </div>
-      <div v-if="chainNodes.length" class="head-actions">
-        <el-button type="success" :disabled="!canTryRun" @click="emit('try-run')">试运行</el-button>
+      <div class="head-actions">
+        <el-button
+          v-if="chainNodes.length"
+          size="small"
+          :type="canvasVisible ? 'primary' : 'default'"
+          @click="emit('toggle-canvas')"
+        >
+          {{ canvasVisible ? '收起流程图' : '查看流程图' }}
+        </el-button>
+        <el-button v-if="chainNodes.length" type="success" :disabled="!canTryRun" @click="emit('try-run')">试运行</el-button>
         <el-button type="primary" @click="focusQuickAdd">+ 添加步骤</el-button>
       </div>
     </div>
@@ -115,38 +123,39 @@
           </nav>
 
           <section v-show="leftTab === 'add'" ref="quickAddRef" class="quick-add">
+            <p class="quick-hint">从组件库挑选接口，添加到调用链末尾</p>
             <el-input
               v-model="pickerKeyword"
               size="default"
-              placeholder="搜索接口名称"
+              placeholder="搜索接口名称 / 编码"
               clearable
               class="quick-search"
             />
-            <div v-if="!filteredComponents.length" class="quick-empty">没有匹配的接口</div>
-            <div v-else class="quick-list">
-              <button
-                v-for="item in filteredComponents.slice(0, quickAddLimit)"
-                :key="item.id"
-                type="button"
-                class="quick-item"
-                @click="pickComponent(item)"
-              >
-                <span class="quick-main">
-                  <span class="quick-name">{{ item.componentName }}</span>
-                  <span class="quick-sub">{{ item.httpMethod }} {{ item.urlPath || item.urlTemplate }}</span>
-                </span>
-                <span class="quick-add-btn">添加</span>
-              </button>
+            <div v-if="!components.length" class="quick-empty">
+              <p>还没有接口组件</p>
+              <el-button type="primary" size="small" @click="router.push('/components')">去接入接口</el-button>
             </div>
-            <el-button
-              v-if="filteredComponents.length > quickAddLimit"
-              text
-              type="primary"
-              class="show-more"
-              @click="quickAddLimit += 10"
-            >
-              显示更多（还有 {{ filteredComponents.length - quickAddLimit }} 个）
-            </el-button>
+            <div v-else-if="!groupedComponents.length" class="quick-empty">没有匹配的接口</div>
+            <div v-else>
+              <div v-for="group in groupedComponents" :key="group.key" class="quick-group">
+                <div class="quick-group-name">{{ group.label }}</div>
+                <div class="quick-list">
+                  <button
+                    v-for="item in group.items"
+                    :key="item.id"
+                    type="button"
+                    class="quick-item"
+                    @click="pickComponent(item)"
+                  >
+                    <span class="quick-main">
+                      <span class="quick-name">{{ item.componentName }}</span>
+                      <span class="quick-sub">{{ item.httpMethod }} {{ item.urlPath || item.urlTemplate }}</span>
+                    </span>
+                    <span class="quick-add-btn">添加</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </section>
         </div>
       </div>
@@ -221,19 +230,21 @@
             </div>
 
             <div v-if="optionalFields.length" class="field-section">
-              <div class="section-head">
+              <button type="button" class="section-toggle" @click="showOptional = !showOptional">
                 <span class="section-title">可选参数</span>
-                <span class="section-hint">{{ optionalFields.length }} 项</span>
-              </div>
-              <WorkflowParamField
-                v-for="field in optionalFields"
-                :key="field.key"
-                :field="field"
-                :binding="findBinding(field.key)"
-                :upstream-nodes="upstreamNodes"
-                :upstream-field-map="upstreamFieldMap"
-                @change="(patch) => patchBinding(field.key, patch)"
-              />
+                <span class="section-hint">{{ optionalFields.length }} 项 · {{ showOptional ? '收起' : '展开' }}</span>
+              </button>
+              <template v-if="showOptional">
+                <WorkflowParamField
+                  v-for="field in optionalFields"
+                  :key="field.key"
+                  :field="field"
+                  :binding="findBinding(field.key)"
+                  :upstream-nodes="upstreamNodes"
+                  :upstream-field-map="upstreamFieldMap"
+                  @change="(patch) => patchBinding(field.key, patch)"
+                />
+              </template>
             </div>
           </div>
         </template>
@@ -254,8 +265,10 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import WorkflowParamField from './WorkflowParamField.vue'
 import { isFieldConfigured } from '@/utils/workflowBinding'
+import { CATEGORY_LABEL } from '@/utils/schema'
 
 const props = defineProps({
   chainNodes: { type: Array, default: () => [] },
@@ -268,15 +281,17 @@ const props = defineProps({
   components: { type: Array, default: () => [] },
   canTryRun: { type: Boolean, default: false },
   canPublish: { type: Boolean, default: false },
+  canvasVisible: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'remove', 'move', 'add', 'update-name', 'update-bindings', 'try-run', 'publish'])
+const emit = defineEmits(['select', 'remove', 'move', 'add', 'update-name', 'update-bindings', 'try-run', 'publish', 'toggle-canvas'])
 
-const leftTab = ref('steps')
+const router = useRouter()
+const leftTab = ref('add')
 const pickerKeyword = ref('')
-const quickAddLimit = ref(12)
 const quickAddRef = ref(null)
 const leftScrollRef = ref(null)
+const showOptional = ref(false)
 
 const selectedIndex = computed(() => {
   const idx = props.chainNodes.findIndex((item) => item.id === props.selectedId)
@@ -301,8 +316,20 @@ const filteredComponents = computed(() => {
     `${item.componentName}${item.componentCode}`.includes(kw),
   )
 })
+const groupedComponents = computed(() => {
+  const map = new Map()
+  for (const item of filteredComponents.value) {
+    const key = item.category || 'HTTP'
+    if (!map.has(key)) {
+      map.set(key, { key, label: CATEGORY_LABEL[key] || key, items: [] })
+    }
+    map.get(key).items.push(item)
+  }
+  return [...map.values()]
+})
 
 watch(() => props.selectedId, async (id) => {
+  showOptional.value = false
   if (!id) return
   leftTab.value = 'steps'
   await nextTick()
@@ -310,7 +337,8 @@ watch(() => props.selectedId, async (id) => {
 })
 
 watch(() => props.chainNodes.length, (len, prev) => {
-  if (len > prev) leftTab.value = 'steps'
+  if (len > (prev || 0)) leftTab.value = 'steps'
+  if (!len) leftTab.value = 'add'
 })
 
 function findBinding(key) {
@@ -385,7 +413,7 @@ function focusQuickAdd() {
   overflow: hidden;
 }
 .left-column {
-  width: 340px;
+  width: 360px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -564,7 +592,20 @@ function focusQuickAdd() {
 .quick-add {
   padding: 12px;
 }
+.quick-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--qz-text-muted);
+  line-height: 1.45;
+}
 .quick-search { margin-bottom: 10px; }
+.quick-group { margin-bottom: 14px; }
+.quick-group-name {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--qz-text-muted);
+}
 .quick-list {
   display: flex;
   flex-direction: column;
@@ -612,8 +653,11 @@ function focusQuickAdd() {
   text-align: center;
   font-size: 13px;
   color: var(--qz-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
 }
-.show-more { margin-top: 8px; }
 .step-config {
   flex: 1;
   min-width: 0;
@@ -656,10 +700,21 @@ function focusQuickAdd() {
 .config-empty { padding: 12px 0; }
 .empty-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 .field-section { margin-bottom: 16px; }
-.section-head {
+.section-head,
+.section-toggle {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  width: 100%;
   margin-bottom: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.section-toggle:hover .section-title {
+  color: var(--el-color-primary);
 }
 .section-title { font-size: 13px; font-weight: 700; }
 .section-hint { font-size: 12px; color: var(--qz-text-muted); }
