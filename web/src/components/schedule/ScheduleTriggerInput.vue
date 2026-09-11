@@ -310,6 +310,7 @@ watch(
   () => {
     applyExternalValue(props.modelValue)
   },
+  { immediate: true },
 )
 
 watch(
@@ -320,7 +321,6 @@ watch(
     if (incoming === serializePayload(previewObject.value)) return
     applyExternalValue(val)
   },
-  { immediate: true },
 )
 
 defineExpose({
