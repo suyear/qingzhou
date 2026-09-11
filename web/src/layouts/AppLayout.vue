@@ -5,13 +5,14 @@
       <div class="qz-header-page">{{ currentTitle }}</div>
     </el-header>
     <el-container class="qz-body">
-      <el-aside v-if="!route.meta.full" class="qz-aside" width="208px">
+      <el-aside v-if="!route.meta.full" class="qz-aside" width="216px">
         <el-menu
+          class="qz-menu"
           :default-active="activeMenu"
           router
-          background-color="#111827"
-          text-color="#cbd5e1"
-          active-text-color="#fff"
+          background-color="#0f172a"
+          text-color="#94a3b8"
+          active-text-color="#ffffff"
         >
           <el-menu-item index="/">
             <el-icon><HomeFilled /></el-icon>
@@ -99,8 +100,24 @@ const activeMenu = computed(() => {
 .el-header {
   padding: 0;
 }
-.el-menu {
+.qz-menu {
   border-right: none;
+  padding: 10px 10px 16px;
+}
+.qz-menu :deep(.el-menu-item) {
+  height: 40px;
+  line-height: 40px;
+  margin: 2px 0;
+  border-radius: 8px;
+}
+.qz-menu :deep(.el-menu-item:hover) {
+  background: var(--qz-aside-hover) !important;
+  color: #e2e8f0;
+}
+.qz-menu :deep(.el-menu-item.is-active) {
+  background: var(--qz-aside-active) !important;
+  color: #fff;
+  font-weight: 600;
 }
 .qz-main-full {
   padding: 0;
@@ -114,10 +131,9 @@ const activeMenu = computed(() => {
   margin-bottom: 14px;
 }
 .nav-group {
-  padding: 14px 20px 6px;
+  padding: 16px 12px 6px;
   font-size: 11px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: #64748b;
-  text-transform: none;
 }
 </style>

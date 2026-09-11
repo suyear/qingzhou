@@ -103,11 +103,9 @@
             </el-button>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag size="small" :type="workflowStatusType(row.status)">
-              {{ workflowStatusLabel(row.status) }}
-            </el-tag>
+            <StatusTag kind="workflow" :value="row.status" />
           </template>
         </el-table-column>
         <el-table-column label="版本" width="72" align="center">
@@ -122,16 +120,16 @@
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <div class="qz-ops" @click.stop>
-              <el-button type="primary" @click="$router.push(`/designer/${row.id}`)">编排</el-button>
+              <el-button type="primary" size="small" @click="$router.push(`/designer/${row.id}`)">编排</el-button>
               <el-button
                 v-if="row.status !== 'PUBLISHED' || hasDraftChanges(row)"
-                type="warning"
+                size="small"
                 @click="onPublish(row)"
               >
                 {{ row.status === 'DISABLED' ? '重新发布' : '发布' }}
               </el-button>
               <el-dropdown trigger="click" @command="(cmd) => onRowCommand(cmd, row)">
-                <el-button>更多</el-button>
+                <el-button size="small">更多</el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="detail">查看详情</el-dropdown-item>
@@ -169,9 +167,7 @@
     <el-drawer v-model="drawerVisible" :title="drawerRow?.workflowName || '工作流详情'" size="440px">
       <template v-if="drawerRow">
         <div class="drawer-tags">
-          <el-tag size="small" :type="workflowStatusType(drawerRow.status)">
-            {{ workflowStatusLabel(drawerRow.status) }}
-          </el-tag>
+          <StatusTag kind="workflow" :value="drawerRow.status" />
           <el-tag v-if="hasDraftChanges(drawerRow)" size="small" type="warning">草稿有修改</el-tag>
           <el-tag size="small" type="info">v{{ drawerRow.version || 1 }}</el-tag>
         </div>
@@ -222,8 +218,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import { askConfirm } from '@/utils/confirm'
-import { copyText, formatTime, workflowStatusLabel, workflowStatusType } from '@/utils/format'
+import { copyText, formatTime } from '@/utils/format'
 import { disableWorkflow, pageWorkflows, publishWorkflow } from '@/api/workflow'
 import { networkErrorMessage } from '@/api/http'
 import PageState from '@/components/PageState.vue'
@@ -418,30 +415,6 @@ async function boot() {
 </script>
 
 <style scoped>
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.stat-card {
-  padding: 14px 16px;
-  border: 1px solid var(--qz-border);
-  border-radius: var(--qz-radius);
-  background: var(--qz-card);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.stat-card:hover,
-.stat-card.active {
-  border-color: var(--el-color-primary);
-  box-shadow: 0 0 0 2px var(--qz-primary-soft);
-}
-.stat-card.stat-ok { border-color: var(--el-color-success-light-7); }
-.stat-label { font-size: 12px; color: var(--qz-text-muted); }
-.stat-num { margin-top: 4px; font-size: 26px; font-weight: 700; }
-.stat-hint { margin-top: 4px; font-size: 11px; color: var(--qz-text-muted); }
 .flow-strip {
   position: relative;
   display: flex;
@@ -513,7 +486,6 @@ async function boot() {
 .publish-actions { display: flex; flex-direction: column; gap: 8px; }
 .hint { color: var(--qz-text-muted); font-size: 13px; margin: 0 0 10px; }
 @media (max-width: 900px) {
-  .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .flow-strip { flex-direction: column; padding-right: 14px; }
   .flow-arrow { display: none; }
 }

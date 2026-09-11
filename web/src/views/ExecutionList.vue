@@ -49,14 +49,16 @@
           <div class="sub">{{ row.workflowCode }} · v{{ row.workflowVersion }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="触发" width="110">
-        <template #default="{ row }">{{ triggerLabel(row.triggerType) }}</template>
-      </el-table-column>
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag size="small" :type="execStatusType(row.status)">{{ execStatusLabel(row.status) }}</el-tag>
-        </template>
-      </el-table-column>
+        <el-table-column label="触发" width="120">
+          <template #default="{ row }">
+            <StatusTag kind="trigger" :value="row.triggerType" />
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <StatusTag kind="exec" :value="row.status" />
+          </template>
+        </el-table-column>
       <el-table-column label="耗时" width="90">
         <template #default="{ row }">{{ durationText(row.durationMs) }}</template>
       </el-table-column>
@@ -124,12 +126,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import PageState from '@/components/PageState.vue'
+import StatusTag from '@/components/StatusTag.vue'
 import ExecutionLogView from '@/components/ExecutionLogView.vue'
 import { askConfirm } from '@/utils/confirm'
 import { getWorkflow, pageWorkflows } from '@/api/workflow'
 import { getExecution, pageExecutions, replayExecution } from '@/api/execution'
 import { networkErrorMessage } from '@/api/http'
-import { copyText, durationText, execStatusLabel, execStatusType, formatTime, triggerLabel } from '@/utils/format'
+import { copyText, durationText, execStatusLabel, formatTime } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()

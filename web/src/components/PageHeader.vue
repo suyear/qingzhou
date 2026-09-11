@@ -23,19 +23,22 @@ defineProps({
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 .titles h2 {
   margin: 0;
-  font-size: 20px;
-  line-height: 28px;
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--qz-text);
 }
 .desc {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   font-size: 13px;
   color: var(--qz-text-muted);
-  line-height: 1.5;
+  line-height: 1.55;
+  max-width: 640px;
 }
 .actions {
   display: flex;

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:unit": "node src/utils/triggerInput.test.js"
+    "test:unit": "node src/utils/triggerInput.test.js && node src/utils/charts.test.js"
   },
   "dependencies": {
     "@antv/x6": "^2.19.2",
@@ -18,6 +18,7 @@
     "@antv/x6-vue-shape": "^2.1.2",
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.20.0",
+    "echarts": "^6.1.0",
     "element-plus": "^2.14.5",
     "vue": "^3.5.41",
     "vue-router": "^5.3.1"
